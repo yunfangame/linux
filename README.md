@@ -12,6 +12,8 @@ Linux-only client based on official Clash Verge Rev `v2.5.6`, with Fengwo busine
 
 This is a development branch, not a production-qualified release. The [Fengwo Linux workflow](https://github.com/yunfangame/linux/actions/workflows/fengwo-linux.yml) produces downloadable test artifacts; it does not publish releases or modify the online update configuration.
 
+Build `2.5.6+1` passed [native x86_64/ARM64 CI](https://github.com/yunfangame/linux/actions/runs/36597968807). Download the `fengwo-linux-universal` artifact from that run, extract it, and run `sh Fengwo-Linux-universal.run`. The same installer passed fresh-install and binary-dependency checks on Debian 12 and Ubuntu 24.04 x86_64 test hosts. These hosts have no desktop; graphical and live business workflows remain unqualified. Test artifacts expire after 14 days.
+
 Build setup, feature coverage and remaining release gates: [development notes](docs/fengwo-linux-development-plan.md).
 
 Do not commit `env.json` or other private configuration. CI reads its two remote-configuration keys from GitHub Actions Secrets. Linux business requests contact the configured Fengwo service; the upstream privacy description below describes upstream behavior only.

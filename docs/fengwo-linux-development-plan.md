@@ -10,7 +10,7 @@
 - Networking remains Clash Verge: mihomo, service authorization, system proxy, TUN, connection monitoring, modes and proxy selection.
 - Measurement follows desktop logic: batches of 50, nested selected-node resolution, provider identity, offline metadata, actual latency without artificial compensation.
 
-This is a source implementation and integration baseline, not a production-qualified release. No real Linux package has yet been built or published from this working tree.
+This is a source implementation and integration baseline, not a production-qualified release. Native package build and installation results are recorded below; no production release has been published.
 
 ## Feature Map
 
@@ -121,7 +121,7 @@ Missing/disabled Linux entries mean no update. Unsigned manifests, altered paylo
 
 ## Verification
 
-Current local results: 50 frontend tests, 18 native Fengwo tests, and 9 installer tests pass. Type checking, focused ESLint, frontend production build, CI YAML parsing and ten-page desktop/mobile Playwright smoke checks also pass. Browser coverage additionally exercises expired-session reauthentication, offline access to a retained subscription, logout, and confirmed installation from the signed-out update dialog. These are native IPC fixtures, not live installation. The frontend build reports non-fatal shared Markdown chunk warnings.
+Current local results: 50 frontend tests, 18 native Fengwo tests, and 10 installer tests pass. Type checking, focused ESLint, frontend production build, CI YAML parsing and ten-page desktop/mobile Playwright smoke checks also pass. Browser coverage additionally exercises expired-session reauthentication, offline access to a retained subscription, logout, and confirmed installation from the signed-out update dialog. These are native IPC fixtures, not live installation. The frontend build reports non-fatal shared Markdown chunk warnings.
 
 ```sh
 pnpm typecheck
@@ -142,11 +142,34 @@ cargo test --locked -p clash-verge --features clippy fengwo --lib
 
 Only package indexes were refreshed and installation simulated. No app package, desktop, proxy service, firewall rule or production release was installed/changed. Credentials are not stored in the repository.
 
-2026-09-30 follow-up: the Debian host still has 751 MiB RAM, no swap, and no Node/Rust toolchain. Its actual `dpkg --compare-versions` confirms `2.5.6+2` upgrades `2.5.6+1`. This follow-up was read-only; it was not an application build or installation test. Native CI remains the intended dual-architecture build path; the configured Git remote is still the official upstream, and no branch was pushed there.
+2026-09-30 initial follow-up: the Debian host still had 751 MiB RAM, no swap, and no Node/Rust toolchain. Its actual `dpkg --compare-versions` confirmed `2.5.6+2` upgrades `2.5.6+1`. This check was read-only, not an application build or installation test. The code was subsequently pushed to the user-provided `yunfangame/linux` repository; the official upstream remote remains unchanged.
+
+### Build 1 And Fresh Installation
+
+On 2026-09-30 (Asia/Shanghai), [Actions run 36597968807](https://github.com/yunfangame/linux/actions/runs/36597968807) completed successfully from commit `19779762394165560602fea2029c54a484807eb9`. Each native architecture passed type checking, 50 frontend tests, 18 native Fengwo tests and 10 installer tests before producing DEB and RPM packages. An earlier run exposed GNU tar's external `gzip` dependency in the isolated test PATH; the installer now checks for it explicitly and the test fixture includes it.
+
+The `fengwo-linux-universal` artifact contains `Fengwo-Linux-universal.run`, its SHA-256 file and its JSON build record. All four embedded packages have package name `fengwo-linux` and version `2.5.6+1`; RPM release is `1`. DEB architectures are `amd64`/`arm64`, and RPM architectures are `x86_64`/`aarch64`. The bundle job verified these fields before packaging. Artifacts are retained for 14 days, not published as a GitHub Release.
+
+Installer SHA-256:
+
+```text
+8cb3c57bf7ebf92160e30d865124741bb838b2d4c1e3f8574799f0b472d4285f
+```
+
+Both authorized test hosts downloaded the same artifact, verified its GitHub artifact digest and installer checksum, and passed `sh Fengwo-Linux-universal.run --check`. Installation used `--yes` as root with `DEBIAN_FRONTEND=noninteractive` and `NEEDRESTART_MODE=l`; unrelated service restarts were deferred.
+
+| Host | Fresh installation | Post-install result |
+|---|---|---|
+| Debian 12 x86_64, glibc 2.36 | `fengwo-linux 2.5.6+1`, 147 runtime dependencies resolved by apt; no existing packages upgraded or removed | Package integrity and all six executable dependency checks passed |
+| Ubuntu 24.04.2 x86_64, glibc 2.39 | `fengwo-linux 2.5.6+1`, 140 runtime dependencies resolved by apt; no existing packages upgraded or removed | Package integrity and all six executable dependency checks passed |
+
+`dpkg --verify fengwo-linux` returned no differences on either host. `ldd` found no unresolved libraries for the app, both cores and all three service binaries. Both `verge-mihomo -v` (v1.19.31) and `verge-mihomo-alpha -v` (alpha-63bd52e) executed successfully. The desktop entry is named `Fengwo Linux` and runs `clash-verge %u`. The proxy service remains inactive; the graphical app was not launched, and no proxy/TUN or firewall settings were changed. The client and its runtime dependencies remain installed on both test hosts.
+
+No online update entry was generated or published for this build. ARM64 passed native compilation and unit tests, but has not had a real-device desktop installation test. Fresh installation does not establish upgrade, uninstall, GUI, proxy/TUN or business-backend correctness.
 
 ## Release Gates Still Open
 
-- Build real binaries and inspect real package names, versions, dependencies; test fresh installation, upgrade, uninstall and interrupted-install recovery.
+- Test upgrade, uninstall and interrupted-install recovery with real packages. Dual-architecture compilation, package metadata inspection and x86_64 fresh installation are complete for build 1.
 - Real ARM64 and Fedora runtime tests.
 - GNOME/KDE launch, system proxy, polkit/TUN and recovery as a normal desktop user, not root.
 - Staging-account login, tickets, node metadata, billing, payments, invitations and IP controls. The checked-out XBoard main source does not dispatch `get_nodes`; the `20260922_subscription_v2_nodes` deployment candidate does. Linux now validates its `{ nodes: [...] }` contract and allowlists the same metadata fields, but the live deployed backend still needs verification.
