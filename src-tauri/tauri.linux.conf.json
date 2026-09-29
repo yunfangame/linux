@@ -1,23 +1,36 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "identifier": "io.github.clash-verge-rev.clash-verge-rev",
+  "identifier": "com.fengwo.linux",
   "bundle": {
     "targets": ["deb", "rpm"],
     "linux": {
       "deb": {
-        "depends": ["openssl", "libayatana-appindicator3-1"],
+        "depends": [
+          "openssl",
+          "ca-certificates",
+          "libayatana-appindicator3-1",
+          "libwebkit2gtk-4.1-0",
+          "pkexec",
+          "polkitd"
+        ],
         "desktopTemplate": "./packages/linux/clash-verge.desktop",
-        "provides": ["clash-verge"],
+        "provides": ["fengwo-linux"],
         "conflicts": ["clash-verge"],
         "replaces": ["clash-verge"],
         "postInstallScript": "./packages/linux/post-install.sh",
         "preRemoveScript": "./packages/linux/pre-remove.sh"
       },
       "rpm": {
-        "depends": ["openssl", "libayatana-appindicator-gtk3"],
+        "depends": [
+          "openssl",
+          "ca-certificates",
+          "libayatana-appindicator-gtk3",
+          "webkit2gtk4.1",
+          "polkit"
+        ],
         "recommends": ["policycoreutils", "policycoreutils-python-utils"],
         "desktopTemplate": "./packages/linux/clash-verge.desktop",
-        "provides": ["clash-verge"],
+        "provides": ["fengwo-linux"],
         "conflicts": ["clash-verge"],
         "obsoletes": ["clash-verge"],
         "postInstallScript": "./packages/linux/post-install-rpm.sh",
@@ -30,6 +43,7 @@
       "./sidecar/clash-verge-service-uninstall",
       "./sidecar/verge-mihomo",
       "./sidecar/verge-mihomo-alpha"
-    ]
+    ],
+    "icon": ["../src/assets/image/fengwo-logo.png"]
   }
 }

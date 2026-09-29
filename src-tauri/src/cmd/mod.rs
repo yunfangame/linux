@@ -95,6 +95,10 @@ pub fn proxy_aware_error(error: &anyhow::Error) -> CommandFailure {
 pub mod app;
 pub mod backup;
 pub mod clash;
+pub mod fengwo;
+mod fengwo_crypto;
+pub mod fengwo_linux;
+mod fengwo_tools;
 pub mod lightweight;
 pub mod listener;
 pub mod media_unlock_checker;

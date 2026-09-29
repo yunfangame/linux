@@ -143,7 +143,7 @@ impl PrfOption {
 
 impl PrfItem {
     /// Builds an item from a partial value that must include `itype`.
-    pub(super) async fn from(item: &Self, file_data: Option<String>) -> Result<Self> {
+    pub(crate) async fn from(item: &Self, file_data: Option<String>) -> Result<Self> {
         let itype = item
             .itype
             .as_ref()

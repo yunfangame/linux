@@ -1,3 +1,28 @@
+# Fengwo Linux
+
+Linux-only client based on official Clash Verge Rev `v2.5.6`, with Fengwo business features ported from `codex/desktop-upstream-0897-port`.
+
+- Branch: `codex/fengwo-linux`.
+- Architectures: x86_64 and ARM64 in one self-extracting installer.
+- Initial platforms: Debian 12 and Ubuntu 24.04; Fedora packages require runtime qualification.
+- Networking: Clash Verge/mihomo; node latency measurement follows the desktop client.
+- Updates: signed configuration's `UpdateUrl`, verified manifests and package checksums.
+
+## Build Status
+
+This is a development branch, not a production-qualified release. The [Fengwo Linux workflow](https://github.com/yunfangame/linux/actions/workflows/fengwo-linux.yml) produces downloadable test artifacts; it does not publish releases or modify the online update configuration.
+
+Build setup, feature coverage and remaining release gates: [development notes](docs/fengwo-linux-development-plan.md).
+
+Do not commit `env.json` or other private configuration. CI reads its two remote-configuration keys from GitHub Actions Secrets. Linux business requests contact the configured Fengwo service; the upstream privacy description below describes upstream behavior only.
+
+## Upstream
+
+Based on [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev), distributed under [GPL-3.0](LICENSE). The following upstream documentation is retained for reference; its downloads are not Fengwo packages.
+
+<details>
+<summary>Original upstream documentation</summary>
+
 <h1 align="center">
   <img src="./src-tauri/icons/icon.png" alt="Clash" width="128" />
   <br>
@@ -137,3 +162,5 @@ your own device. See the [Privacy Policy](./PRIVACY.md) for details.
 ## License
 
 GPL-3.0 License. See [License here](./LICENSE) for details.
+
+</details>

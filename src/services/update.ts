@@ -72,6 +72,8 @@ const localVersionNormalized = normalizeVersion(appVersion)
 export const checkUpdateSafe = async (
   options?: CheckOptions,
 ): Promise<Update | null> => {
+  // Fengwo Linux uses signed universal installers, not upstream application updates.
+  if (OS_PLATFORM === 'linux') return null
   const result = await check(options ?? {})
   if (!result) return null
 

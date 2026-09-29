@@ -87,6 +87,7 @@ reqwest_dav = "0.3.3"
 aes-gcm = { version = "0.11.1" }
 base64 = "0.23.1"
 sha2 = "0.11"
+ring = "0.17.14"
 getrandom = "0.4.3"
 futures = "0.3.34"
 gethostname = "1.1.0"

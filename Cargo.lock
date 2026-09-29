@@ -1122,6 +1122,7 @@ dependencies = [
  "reqwest 0.13.5",
  "reqwest_dav",
  "rfd",
+ "ring",
  "runas",
  "rustls",
  "scopeguard",

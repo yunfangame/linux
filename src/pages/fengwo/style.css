@@ -1,0 +1,238 @@
+.fengwo-sidebar {
+  flex: 0 0 224px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid;
+  height: 100%;
+}
+.fengwo-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 18px 18px;
+}
+.fengwo-brand img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+.fengwo-nav {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 4px 10px !important;
+}
+.fengwo-nav-item {
+  min-height: 46px;
+  border-radius: 8px !important;
+  margin-bottom: 4px !important;
+}
+.fengwo-nav-item .MuiListItemIcon-root {
+  min-width: 42px;
+}
+.fengwo-nav-item.active {
+  color: #0870c9;
+  background: #dceeff;
+}
+.fengwo-nav-item.active .MuiListItemIcon-root {
+  color: #0870c9;
+}
+.fengwo-sidebar-bottom {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #9ba6b433;
+}
+.fengwo-offline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 14px;
+}
+.layout .layout-content__right {
+  min-width: 0;
+}
+.fengwo-page {
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.fengwo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #9ba6b433;
+}
+.fengwo-account-email {
+  overflow-wrap: anywhere;
+  margin-top: 4px !important;
+}
+.fengwo-actions,
+.fengwo-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fengwo-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  padding: 12px 0;
+}
+.fengwo-stat {
+  min-width: 0;
+  border-left: 3px solid #48a89f;
+  padding: 2px 14px;
+  overflow-wrap: anywhere;
+}
+.fengwo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+}
+.fengwo-plan {
+  border: 1px solid #9ba6b444;
+  border-radius: 8px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.fengwo-plan-content {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.fengwo-table {
+  overflow: auto;
+  flex-shrink: 0;
+}
+.fengwo-table table {
+  min-width: 620px;
+}
+.fengwo-table .MuiTableCell-root {
+  font-size: 13px;
+  max-width: 340px;
+  overflow-wrap: anywhere;
+}
+.fengwo-table .MuiTableHead-root {
+  background: #8b9bb310;
+}
+.fengwo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 50px 12px;
+  min-height: 100px;
+}
+.fengwo-login {
+  max-width: 380px;
+  padding: 60px 24px;
+  margin: auto;
+  display: grid;
+  gap: 16px;
+  text-align: center;
+}
+.fengwo-login > img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  margin: auto;
+}
+.fengwo-login form {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+.fengwo-form {
+  display: grid;
+  gap: 16px;
+  max-width: 560px;
+}
+.fengwo-network {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 20px 0;
+}
+.fengwo-network > div {
+  min-width: 0;
+}
+.fengwo-embedded {
+  flex: 1;
+  min-height: 450px;
+  position: relative;
+}
+.fengwo-page *,
+.fengwo-sidebar *,
+.fengwo-login * {
+  letter-spacing: 0 !important;
+}
+@media (max-width: 900px) {
+  .fengwo-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fengwo-sidebar {
+    flex-basis: 188px;
+  }
+  .fengwo-page {
+    padding: 20px;
+  }
+  .fengwo-network {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .fengwo-sidebar {
+    flex-basis: 60px;
+  }
+  .fengwo-brand {
+    padding: 16px 10px;
+  }
+  .fengwo-brand > div,
+  .fengwo-nav-item .MuiListItemText-root,
+  .fengwo-offline > span:not(.MuiSwitch-root),
+  .fengwo-offline > svg {
+    display: none;
+  }
+  .fengwo-nav {
+    padding: 4px !important;
+  }
+  .fengwo-nav-item {
+    padding: 8px 12px !important;
+  }
+  .fengwo-nav-item .MuiListItemIcon-root {
+    min-width: 24px;
+  }
+  .fengwo-sidebar-bottom {
+    padding: 4px;
+  }
+  .fengwo-sidebar-bottom > .MuiButton-root {
+    font-size: 0;
+    min-width: 0;
+  }
+  .fengwo-sidebar-bottom > .MuiButton-root .MuiButton-startIcon {
+    margin: 0;
+  }
+  .fengwo-page {
+    padding: 16px;
+  }
+  .fengwo-header h1 {
+    font-size: 21px;
+  }
+  .fengwo-stats {
+    gap: 12px;
+  }
+  .fengwo-stat .MuiTypography-h6 {
+    font-size: 16px;
+  }
+}

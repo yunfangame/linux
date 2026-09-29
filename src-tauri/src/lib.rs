@@ -125,6 +125,10 @@ mod app_init {
 
     pub fn generate_handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
         tauri::generate_handler![
+            cmd::fengwo::fengwo_action,
+            cmd::fengwo_linux::fengwo_linux_status,
+            cmd::fengwo_linux::fengwo_check_update,
+            cmd::fengwo_linux::fengwo_install_update,
             tauri_plugin_clash_verge_sysinfo::commands::get_system_info,
             tauri_plugin_clash_verge_sysinfo::commands::get_app_uptime,
             tauri_plugin_clash_verge_sysinfo::commands::export_diagnostic_info,

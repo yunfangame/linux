@@ -1,4 +1,11 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    for key in [
+        "REMOTE_CONFIG_AES_KEY",
+        "REMOTE_CONFIG_SIGNING_PUBLIC_KEY",
+        "FENGWO_BUILD_NUMBER",
+    ] {
+        println!("cargo:rerun-if-env-changed={key}");
+    }
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
         && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
         && std::env::var_os("CARGO_FEATURE_CLIPPY").is_some()

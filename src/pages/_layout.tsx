@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next'
 import { Outlet, useNavigate } from 'react-router'
 
 import { BaseErrorBoundary } from '@/components/base'
-import { LayoutSidebar } from '@/components/layout/layout-sidebar'
 import { NoticeManager } from '@/components/layout/notice-manager'
 import { ServiceMigrationDialog } from '@/components/layout/service-migration-dialog'
 import { SysproxyPrivilegeDialog } from '@/components/layout/sysproxy-privilege-dialog'
@@ -27,6 +26,7 @@ import {
   usePendingFailures,
 } from './_layout/hooks'
 import { handleNoticeMessage } from './_layout/utils'
+import { FengwoSidebar, SessionBoundary } from './fengwo/shell'
 
 import 'dayjs/locale/ru'
 import 'dayjs/locale/zh-cn'
@@ -37,12 +37,10 @@ const OS = getSystem()
 
 const Layout = () => {
   const mode = useThemeMode()
-  const isDark = mode !== 'light'
   const { t } = useTranslation()
   const { theme } = useCustomTheme()
   const { verge } = useVerge()
   const { language } = verge ?? {}
-  const navCollapsed = verge?.collapse_navbar ?? false
   const { switchLanguage } = useI18n()
   const navigate = useNavigate()
   const themeReady = useMemo(() => Boolean(theme), [theme])
@@ -127,7 +125,7 @@ const Layout = () => {
       <Paper
         square
         elevation={0}
-        className={`${OS} layout${navCollapsed ? ' layout--nav-collapsed' : ''}`}
+        className={`${OS} layout`}
         style={{
           borderTopLeftRadius: '0px',
           borderTopRightRadius: '0px',
@@ -160,13 +158,15 @@ const Layout = () => {
         {customTitlebar}
 
         <div className="layout-content">
-          <LayoutSidebar isDark={isDark} isCollapsed={navCollapsed} />
+          <FengwoSidebar />
 
           <div className="layout-content__right">
             <div className="the-bar"></div>
             <div className="the-content">
               <BaseErrorBoundary>
-                <Outlet />
+                <SessionBoundary>
+                  <Outlet />
+                </SessionBoundary>
               </BaseErrorBoundary>
             </div>
           </div>

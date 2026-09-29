@@ -3,6 +3,9 @@
   "version": "2.5.6",
   "license": "GPL-3.0-only",
   "scripts": {
+    "linux:build": "node scripts/linux/build.mjs",
+    "linux:bundle": "node scripts/linux/bundle.mjs",
+    "linux:test": "node --test scripts/linux/installer.test.mjs",
     "prepare": "husky || true",
     "dev": "node scripts/dev.mjs dev",
     "dev:service": "node scripts/dev.mjs service",

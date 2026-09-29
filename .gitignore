@@ -17,3 +17,8 @@ target
 .vfox
 .claude
 .zed
+env.json
+.env
+.env.*
+linux-packages/
+artifacts/

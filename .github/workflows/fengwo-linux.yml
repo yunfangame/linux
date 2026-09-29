@@ -1,0 +1,122 @@
+name: Fengwo Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: Monotonically increasing Linux release number
+        required: true
+        type: string
+      download_url:
+        description: Optional final HTTPS download URL; leave blank for test artifacts only
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fengwo-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/codex/fengwo-linux'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    container: debian:12
+    timeout-minutes: 120
+    env:
+      HUSKY: '0'
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      FENGWO_BUILD_NUMBER: ${{ inputs.build_number }}
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git curl ca-certificates build-essential pkg-config libssl-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm file xz-utils
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.21.0'
+      - uses: pnpm/action-setup@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fengwo-debian12-${{ matrix.target }}
+          cache-on-failure: true
+      - name: Verify source
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+          node --test scripts/linux/installer.test.mjs
+          cargo test --locked --target ${{ matrix.target }} -p clash-verge --features clippy fengwo --lib
+      - name: Prepare Clash Verge core and service
+        run: pnpm prebuild ${{ matrix.target }}
+      - name: Build native Linux packages
+        env:
+          REMOTE_CONFIG_AES_KEY: ${{ secrets.REMOTE_CONFIG_AES_KEY }}
+          REMOTE_CONFIG_SIGNING_PUBLIC_KEY: ${{ secrets.REMOTE_CONFIG_SIGNING_PUBLIC_KEY }}
+        run: pnpm linux:build --target ${{ matrix.target }}
+      - name: Collect native packages
+        env:
+          FENGWO_TARGET: ${{ matrix.target }}
+          FENGWO_ARCH: ${{ matrix.arch }}
+        run: node scripts/linux/collect.mjs
+      - uses: actions/upload-artifact@v6
+        with:
+          name: fengwo-${{ matrix.arch }}
+          path: linux-packages/*
+          if-no-files-found: error
+          retention-days: 14
+
+  bundle:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.21.0'
+      - name: Install RPM inspector
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: fengwo-*
+          path: linux-packages
+          merge-multiple: true
+      - name: Build universal installer and update entry
+        env:
+          FENGWO_BUILD_NUMBER: ${{ inputs.build_number }}
+          FENGWO_DOWNLOAD_URL: ${{ inputs.download_url }}
+        run: |
+          node scripts/linux/bundle.mjs linux-packages artifacts/Fengwo-Linux-universal.run
+          sh artifacts/Fengwo-Linux-universal.run --check
+          if [ -n "$FENGWO_DOWNLOAD_URL" ]; then
+            node scripts/linux/update-entry.mjs artifacts/Fengwo-Linux-universal.run artifacts/linux-update-entry.json
+          fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: fengwo-linux-universal
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
