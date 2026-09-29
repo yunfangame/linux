@@ -31,6 +31,7 @@ async function fixture(manager = 'apt') {
   }
   for (const utility of [
     'tar',
+    'gzip',
     'awk',
     'tail',
     'mktemp',
@@ -228,6 +229,18 @@ test('extracts only to a new directory and leaves installation untouched', async
       'aarch64-deb',
     )
     assert.notEqual(f.run(['--extract', target]).status, 0)
+    await assert.rejects(readFile(f.env.TEST_LOG))
+  } finally {
+    await rm(f.dir, { recursive: true, force: true })
+  }
+})
+test('reports a missing gzip dependency before trying to extract or install', async () => {
+  const f = await fixture()
+  try {
+    await rm(path.join(f.bin, 'gzip'))
+    const result = f.run(['--yes'])
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /Required utility missing: gzip/)
     await assert.rejects(readFile(f.env.TEST_LOG))
   } finally {
     await rm(f.dir, { recursive: true, force: true })

@@ -31,7 +31,7 @@ else
   printf 'Supported package managers: apt (Debian/Ubuntu), dnf (Fedora).\n' >&2
   exit 1
 fi
-for utility in sha256sum tar awk tail mktemp; do
+for utility in sha256sum tar gzip awk tail mktemp; do
   command -v "$utility" >/dev/null 2>&1 || { printf 'Required utility missing: %s\n' "$utility" >&2; exit 1; }
 done
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/fengwo-install.XXXXXXXX")
