@@ -140,11 +140,34 @@ describe('global mode transition', () => {
     expect(recordSelectedNode).not.toHaveBeenCalled()
     expect(patchClashMode).toHaveBeenCalledWith('global')
   })
-  it.each(['missing-global', 'direct-subscription', 'missing-member', 'cycle'])(
+  it('replaces the core PassRule adapter with the selected subscription', async () => {
+    view.records['PASS-RULE'] = {
+      ...view.records.DIRECT,
+      recordId: 'PASS-RULE',
+      name: 'PASS-RULE',
+      type: 'PassRule',
+      source: { kind: 'core', proxyName: 'PASS-RULE' },
+    }
+    view.global!.members.push(nodeRef('PASS-RULE'))
+    view.global!.now = 'PASS-RULE'
+    await changeRoutingMode('global')
+    expect(selectNodeForGroup).toHaveBeenCalledWith('GLOBAL', 'subscription')
+    expect(recordSelectedNode).toHaveBeenCalledWith('GLOBAL', 'subscription')
+    expect(patchClashMode).toHaveBeenCalledWith('global')
+  })
+  it.each([
+    'missing-global',
+    'direct-subscription',
+    'pass-rule-subscription',
+    'missing-member',
+    'cycle',
+  ])(
     'does not enable global mode with an unusable route: %s',
     async (scenario) => {
       if (scenario === 'missing-global') view.global = null
       if (scenario === 'direct-subscription') view.groups[0].now = 'DIRECT'
+      if (scenario === 'pass-rule-subscription')
+        view.records['node-a'].type = 'PassRule'
       if (scenario === 'missing-member')
         view.global!.members = [nodeRef('DIRECT')]
       if (scenario === 'cycle') {

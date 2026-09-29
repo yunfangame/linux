@@ -34,9 +34,14 @@ function isProxy(view: ProxyViewV1, group?: ProxyGroupView) {
   const node = selectedNode(view, group)
   return (
     !!node &&
-    !['direct', 'reject', 'rejectdrop', 'pass', 'compatible'].includes(
-      node.type.toLowerCase(),
-    )
+    ![
+      'direct',
+      'reject',
+      'rejectdrop',
+      'pass',
+      'passrule',
+      'compatible',
+    ].includes(node.type.toLowerCase())
   )
 }
 
