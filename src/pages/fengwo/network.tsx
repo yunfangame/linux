@@ -52,7 +52,7 @@ import { useConnectionData } from '@/hooks/use-connection-data'
 import { useProxySelection } from '@/hooks/use-proxy-selection'
 import { useSystemProxyState } from '@/hooks/use-system-proxy-state'
 import { useTrafficData } from '@/hooks/use-traffic-data'
-import { getProxyView, patchClashMode } from '@/services/cmds'
+import { getProxyView } from '@/services/cmds'
 import {
   type LocalRule,
   type NodeMetadata,
@@ -70,6 +70,11 @@ import {
   nodeStatus,
   resolveDelayNode,
 } from '@/services/fengwo-delay'
+import {
+  changeRoutingMode,
+  currentRoute,
+  routingGroups,
+} from '@/services/fengwo-routing'
 
 import { RichText } from './content'
 import { Feedback, Loading, Page, Refresh, Stat } from './shared'
@@ -86,21 +91,23 @@ function useFengwoProxies() {
 }
 function ModeSelector() {
   const mode = useClashMode()
+  const proxies = useFengwoProxies()
   const action = useAction()
   return (
     <>
       <ToggleButtonGroup
         size="small"
-        value={mode.data ?? 'rule'}
+        value={mode.data?.toLowerCase() ?? 'rule'}
         exclusive
         onChange={(_, value) => {
           if (value)
             void action.run(async () => {
-              await patchClashMode(value)
+              await changeRoutingMode(value)
               await mode.refetch()
+              await proxies.mutate()
             })
         }}
-        disabled={action.busy}
+        disabled={action.busy || mode.isLoading}
       >
         <ToggleButton value="rule">规则模式</ToggleButton>
         <ToggleButton value="global">全局模式</ToggleButton>
@@ -121,6 +128,8 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const proxies = useFengwoProxies()
+  const mode = useClashMode()
+  const route = currentRoute(proxies.data, mode.data)
   const traffic = useTrafficData()
   const { indicator, toggleSystemProxy } = useSystemProxyState()
   const notices =
@@ -154,8 +163,8 @@ export function DashboardPage() {
         <div className="fengwo-form">
           <Chip
             sx={{ alignSelf: 'start' }}
-            color={indicator ? 'success' : 'default'}
-            label={indicator ? '加速已开启' : '加速未开启'}
+            color={indicator && !route.direct ? 'success' : 'default'}
+            label={indicator ? '系统代理已开启' : '加速未开启'}
           />
           <Button
             size="large"
@@ -167,11 +176,14 @@ export function DashboardPage() {
             {indicator ? '断开加速' : '开启加速'}
           </Button>
           <ModeSelector />
+          {indicator && route.direct && (
+            <Alert severity="warning">当前流量直连</Alert>
+          )}
           <Button
             startIcon={<TuneRounded />}
             onClick={() => navigate('/nodes')}
           >
-            {proxies.data?.groups[0]?.now ?? '选择节点'}
+            {route.name ?? '选择节点'}
           </Button>
         </div>
         <div>
@@ -258,9 +270,15 @@ export function DashboardPage() {
 }
 export function NodesPage() {
   const { session } = useFengwo()
-  return <NodeList key={session?.profileUid ?? 'empty'} />
+  const mode = useClashMode()
+  return (
+    <NodeList
+      key={`${session?.profileUid ?? 'empty'}:${mode.data}`}
+      mode={mode.data}
+    />
+  )
 }
-function NodeList() {
+function NodeList({ mode }: { mode?: string | null }) {
   const { session } = useFengwo()
   const proxies = useFengwoProxies()
   const metadata = useBusiness<NodeMetadata[]>('nodes')
@@ -276,7 +294,7 @@ function NodeList() {
       generation.value++
     }
   }, [])
-  const groups = proxies.data?.groups.filter((group) => !group.hidden) ?? []
+  const groups = routingGroups(proxies.data, mode ?? undefined)
   const group = groups.find((item) => item.name === groupName) ?? groups[0]
   const { changeProxy } = useProxySelection({
     onSuccess: () => {

@@ -44,12 +44,37 @@ try {
         },
       ]),
     )
+    records.DIRECT = {
+      ...caps,
+      recordId: 'DIRECT',
+      name: 'DIRECT',
+      type: 'Direct',
+      alive: true,
+      history: [],
+      source: { kind: 'core', proxyName: 'DIRECT' },
+    }
     const proxyView = {
       schemaVersion: 1,
       orderSource: 'runtime',
       providerState: 'ready',
-      global: null,
-      direct: null,
+      global: {
+        ...caps,
+        name: 'GLOBAL',
+        type: 'Selector',
+        alive: true,
+        now: 'DIRECT',
+        history: [],
+        members: [
+          { kind: 'node', name: 'DIRECT', recordId: 'DIRECT' },
+          { kind: 'group', name: '蜂窝加速' },
+          ...names.map((name, index) => ({
+            kind: 'node',
+            name,
+            recordId: String(index),
+          })),
+        ],
+      },
+      direct: 'DIRECT',
       standalone: [],
       providers: [],
       records,
@@ -92,6 +117,7 @@ try {
       enable_custom_clash_rules: false,
       verge_mixed_port: 7897,
     }
+    let mode = 'rule'
     let ruleList = [
       {
         id: 'fixture-rule',
@@ -247,7 +273,7 @@ try {
           verge = { ...verge, ...args.payload }
           return null
         }
-        if (command === 'get_proxy_view') return proxyView
+        if (command === 'get_proxy_view') return structuredClone(proxyView)
         if (command === 'get_profiles')
           return {
             current: 'fixture-profile',
@@ -261,7 +287,19 @@ try {
           }
         if (command === 'get_runtime_config')
           return { 'mixed-port': 7897, tun: { enable: false }, dns: {} }
-        if (command === 'get_clash_mode') return 'rule'
+        if (command === 'get_clash_mode') return mode
+        if (command === 'patch_clash_mode') {
+          mode = args.payload
+          return null
+        }
+        if (command === 'plugin:mihomo|select_node_for_group') {
+          const group = [proxyView.global, ...proxyView.groups].find(
+            (item) => item.name === args.groupName,
+          )
+          if (!group) throw new Error('Unknown fixture group')
+          group.now = args.node
+          return null
+        }
         if (command === 'get_runtime_state')
           return {
             mode: 'Sidecar',
@@ -310,7 +348,7 @@ try {
             : null
         if (command === 'plugin:mihomo|get_base_config')
           return {
-            mode: 'rule',
+            mode,
             mixedPort: 7897,
             tun: { enable: false },
             dns: {},
@@ -380,6 +418,55 @@ try {
   await page.locator('nav a[href="/nodes"]').click()
   await page.getByRole('button', { name: '全部测速' }).click()
   await page.getByText('42 ms', { exact: true }).first().waitFor()
+  await page.locator('nav a[href="/"]').click()
+  await page.getByRole('button', { name: '全局模式', exact: true }).click()
+  await page.getByRole('button', { name: '香港 01', exact: true }).waitFor()
+  const routeCalls = await page.evaluate(() =>
+    window.__fengwoCalls.filter(({ command }) =>
+      [
+        'plugin:mihomo|select_node_for_group',
+        'record_selected_node',
+        'patch_clash_mode',
+      ].includes(command),
+    ),
+  )
+  assert.deepEqual(
+    routeCalls.map(({ command }) => command),
+    [
+      'plugin:mihomo|select_node_for_group',
+      'record_selected_node',
+      'patch_clash_mode',
+    ],
+  )
+  assert.deepEqual(routeCalls[0].args, {
+    groupName: 'GLOBAL',
+    node: '蜂窝加速',
+  })
+  await page.locator('nav a[href="/nodes"]').click()
+  assert.equal(
+    (await page.getByRole('combobox', { name: '代理组' }).textContent()).trim(),
+    'GLOBAL',
+  )
+  await page
+    .getByRole('row')
+    .filter({ hasText: '日本 01' })
+    .getByRole('button', { name: '选择', exact: true })
+    .click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: '日本 01' })
+    .getByText('当前', { exact: true })
+    .waitFor()
+  await page.locator('nav a[href="/"]').click()
+  await page.getByRole('button', { name: '日本 01', exact: true }).waitFor()
+  await page.getByRole('button', { name: '规则模式', exact: true }).click()
+  await page.getByRole('button', { name: '香港 01', exact: true }).waitFor()
+  await page.getByRole('button', { name: '全局模式', exact: true }).click()
+  await page.getByRole('button', { name: '日本 01', exact: true }).waitFor()
+  await page.getByRole('button', { name: '直连模式', exact: true }).click()
+  await page.getByRole('button', { name: 'DIRECT', exact: true }).waitFor()
+  await page.getByRole('button', { name: '规则模式', exact: true }).click()
+  await page.getByRole('button', { name: '香港 01', exact: true }).waitFor()
   await page.locator('nav a[href="/plans"]').click()
   await page.getByRole('button', { name: /购买/ }).first().click()
   await page.getByRole('dialog').waitFor()
@@ -479,7 +566,7 @@ try {
   })
   assert.deepEqual(errors, [])
   console.log(
-    `UI smoke passed: ten desktop/mobile pages, node test, payment, offline, expired-session recovery and signed-out update. Screenshots: ${output}`,
+    `UI smoke passed: ten desktop/mobile pages, global routing and persistence, node test, payment, offline, expired-session recovery and signed-out update. Screenshots: ${output}`,
   )
 } finally {
   await browser.close()
