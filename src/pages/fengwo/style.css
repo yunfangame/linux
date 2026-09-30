@@ -134,24 +134,168 @@
   padding: 50px 12px;
   min-height: 100px;
 }
+.fengwo-session-loading {
+  flex: 1;
+}
 .fengwo-login {
-  max-width: 380px;
-  padding: 60px 24px;
-  margin: auto;
+  flex: 1;
+  min-height: 0;
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr);
+  overflow: auto;
+  color: #202530;
+  background: #f8f9ff;
+}
+.fengwo-login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 48px 28px 28px;
+  background: #10082f;
+  color: #fff;
   text-align: center;
 }
-.fengwo-login > img {
-  width: 72px;
-  height: 72px;
-  object-fit: contain;
+.fengwo-login-brand-content {
   margin: auto;
+  width: 100%;
+  max-width: 440px;
+}
+.fengwo-login-brand img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.35;
+  object-fit: cover;
+}
+.fengwo-login-edition.MuiTypography-root {
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+.fengwo-login-slogan.MuiTypography-root {
+  color: #ffca28;
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 52px;
+}
+.fengwo-login-copyright.MuiTypography-root {
+  color: #c0badb;
+  font-size: 13px;
+  margin-top: 36px;
+}
+.fengwo-login-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 24px 48px 48px;
+}
+.fengwo-login-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 28px;
+}
+.fengwo-login-content {
+  width: 100%;
+  max-width: 640px;
+  margin: auto;
+}
+.fengwo-login-title.MuiTypography-root {
+  color: #005cbd;
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.fengwo-login-welcome.MuiTypography-root {
+  color: #505869;
+  font-size: 20px;
+  margin-top: 20px;
 }
 .fengwo-login form {
   display: grid;
-  gap: 18px;
-  margin-top: 20px;
+  gap: 30px;
+  margin-top: 48px;
+}
+.fengwo-login-field {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.fengwo-login-field > label {
+  font-size: 18px;
+  font-weight: 700;
+}
+.fengwo-login-field .MuiOutlinedInput-root {
+  min-height: 64px;
+  border-radius: 8px;
+  color: #202530;
+  background: #f8f9ff;
+}
+.fengwo-login-field .MuiOutlinedInput-notchedOutline {
+  border-color: #858b99;
+}
+.fengwo-login-field .MuiInputAdornment-root,
+.fengwo-login-field .MuiIconButton-root {
+  color: #505869;
+}
+.fengwo-login-field input {
+  min-width: 0;
+}
+.fengwo-login form > .MuiButton-root {
+  min-height: 64px;
+  border-radius: 8px;
+  background: #005cbd;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: none;
+}
+.fengwo-login form > .MuiButton-root:hover {
+  background: #004b9a;
+}
+.fengwo-login form > .MuiButton-root.Mui-disabled {
+  background: #7898bb;
+  color: #fff;
+}
+@media (max-width: 760px) {
+  .fengwo-login {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .fengwo-login-brand {
+    padding: 20px;
+  }
+  .fengwo-login-brand-content {
+    max-width: 172px;
+  }
+  .fengwo-login-edition.MuiTypography-root {
+    font-size: 16px;
+    margin-top: 8px;
+  }
+  .fengwo-login-slogan,
+  .fengwo-login-copyright {
+    display: none;
+  }
+  .fengwo-login-panel {
+    padding: 20px 24px 32px;
+  }
+  .fengwo-login-tools {
+    margin-bottom: 20px;
+  }
+  .fengwo-login-content {
+    margin: 0 auto;
+  }
+  .fengwo-login-title.MuiTypography-root {
+    font-size: 32px;
+  }
+  .fengwo-login-welcome.MuiTypography-root {
+    font-size: 16px;
+    margin-top: 12px;
+  }
+  .fengwo-login form {
+    margin-top: 28px;
+    gap: 24px;
+  }
 }
 .fengwo-form {
   display: grid;

@@ -157,20 +157,20 @@ const Layout = () => {
         {/* Custom titlebar - rendered only when decorated is false, memoized for performance */}
         {customTitlebar}
 
-        <div className="layout-content">
-          <FengwoSidebar />
+        <SessionBoundary>
+          <div className="layout-content">
+            <FengwoSidebar />
 
-          <div className="layout-content__right">
-            <div className="the-bar"></div>
-            <div className="the-content">
-              <BaseErrorBoundary>
-                <SessionBoundary>
+            <div className="layout-content__right">
+              <div className="the-bar"></div>
+              <div className="the-content">
+                <BaseErrorBoundary>
                   <Outlet />
-                </SessionBoundary>
-              </BaseErrorBoundary>
+                </BaseErrorBoundary>
+              </div>
             </div>
           </div>
-        </div>
+        </SessionBoundary>
       </Paper>
     </ThemeProvider>
   )

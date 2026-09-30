@@ -149,7 +149,18 @@ try {
       },
     ]
     window.__fengwoCalls = []
-    window.__fengwoFixture = { expireNextAction: '', updateAvailable: false }
+    let releaseRestore
+    const restoring = new Promise((resolve) => {
+      releaseRestore = resolve
+    })
+    window.__fengwoFixture = {
+      expireNextAction: '',
+      updateAvailable: false,
+      releaseRestore: (value) => {
+        if (value === null) session = null
+        releaseRestore(value)
+      },
+    }
     let callbackId = 0
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} }
     window.__TAURI_INTERNALS__ = {
@@ -164,14 +175,18 @@ try {
         window.__fengwoCalls.push({ command, args })
         if (command === 'fengwo_action') {
           const { action, payload = {} } = args
+          if (action === 'session') {
+            const restoreError = await restoring
+            if (restoreError) throw restoreError
+            return session
+          }
           if (action === 'sessionState') return session
           if (window.__fengwoFixture.expireNextAction === action) {
             window.__fengwoFixture.expireNextAction = ''
             session = { ...session, needsLogin: true }
             throw { detail: 'device_not_registered' }
           }
-          if (action === 'session' || action === 'sync' || action === 'summary')
-            return session
+          if (action === 'sync' || action === 'summary') return session
           if (action === 'logout') {
             session = null
             return null
@@ -403,6 +418,10 @@ try {
     ['/tools', '实用工具'],
   ]
   await page.goto(origin)
+  await page.getByRole('status', { name: '正在恢复登录' }).waitFor()
+  assert.equal(await page.locator('.fengwo-sidebar').count(), 0)
+  assert.equal(await page.locator('nav').count(), 0)
+  await page.evaluate(() => window.__fengwoFixture.releaseRestore())
   for (const [route, title] of pages) {
     await page.locator(`nav a[href="${route}"]`).click()
     await page.getByRole('heading', { name: title, exact: true }).waitFor()
@@ -503,17 +522,15 @@ try {
     window.__fengwoFixture.expireNextAction = 'sync'
   })
   await page.getByRole('button', { name: '更新订阅', exact: true }).click()
-  await page.getByRole('heading', { name: '重新登录蜂窝加速器' }).waitFor()
+  await page.getByRole('heading', { name: '重新登录', exact: true }).waitFor()
   assert.equal(
     await page.getByLabel('邮箱').inputValue(),
     'preview@example.org',
   )
-  await page.getByRole('switch', { name: '离线模式' }).check()
-  await page
-    .getByText('离线模式 · 当前使用本地订阅，在线业务已暂停。')
-    .waitFor()
-  await page.getByRole('switch', { name: '离线模式' }).uncheck()
-  await page.getByLabel('密码').fill('test-only-password')
+  assert.equal(await page.locator('.fengwo-sidebar').count(), 0)
+  assert.equal(await page.getByRole('switch', { name: '离线模式' }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: '退出登录' }).count(), 0)
+  await page.getByLabel('密码', { exact: true }).fill('test-only-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await page.getByRole('heading', { name: '加速主页', exact: true }).waitFor()
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
@@ -521,8 +538,68 @@ try {
     .getByRole('dialog')
     .getByRole('button', { name: '确认', exact: true })
     .click()
-  await page.getByRole('heading', { name: '登录蜂窝加速器' }).waitFor()
-  assert.equal(await page.getByLabel('密码').inputValue(), '')
+  await page.getByRole('heading', { name: '登录', exact: true }).waitFor()
+  assert.equal(await page.getByLabel('密码', { exact: true }).inputValue(), '')
+  async function checkLoginLayout(target, name, width, height) {
+    await target.setViewportSize({ width, height })
+    assert.equal(await target.locator('nav').count(), 0)
+    assert.equal(await target.locator('.fengwo-sidebar').count(), 0)
+    assert.equal(
+      await target.getByRole('switch', { name: '离线模式' }).count(),
+      0,
+    )
+    assert.equal(await target.getByText('使用本地缓存进入').count(), 0)
+    await target.getByText('Linux 版本', { exact: true }).waitFor()
+    const layout = await target.evaluate(() => {
+      const login = document.querySelector('.fengwo-login')
+      const image = login.querySelector('img')
+      return {
+        fits:
+          login.scrollWidth <= login.clientWidth &&
+          document.documentElement.scrollWidth <= innerWidth,
+        image: image.complete && image.naturalWidth > 0,
+      }
+    })
+    assert.deepEqual(layout, { fits: true, image: true })
+    await target.mouse.move(width - 1, height - 1)
+    await target.screenshot({
+      path: path.join(output, `login-${name}.png`),
+      animations: 'disabled',
+    })
+    await target
+      .getByRole('button', { name: '登录', exact: true })
+      .scrollIntoViewIfNeeded()
+    const button = await target
+      .getByRole('button', { name: '登录', exact: true })
+      .boundingBox()
+    assert.ok(
+      button &&
+        button.x >= 0 &&
+        button.x + button.width <= width &&
+        button.y >= 0 &&
+        button.y + button.height <= height,
+    )
+  }
+  await checkLoginLayout(page, 'desktop', 1280, 900)
+  await checkLoginLayout(page, 'short', 940, 580)
+  await checkLoginLayout(page, 'mobile', 390, 844)
+  await page.getByLabel('密码', { exact: true }).fill('fixture-password')
+  await page.getByRole('button', { name: '显示密码', exact: true }).click()
+  assert.equal(
+    await page.getByLabel('密码', { exact: true }).getAttribute('type'),
+    'text',
+  )
+  assert.equal(
+    await page.getByLabel('密码', { exact: true }).inputValue(),
+    'fixture-password',
+  )
+  await page.getByRole('button', { name: '隐藏密码', exact: true }).click()
+  assert.equal(
+    await page.getByLabel('密码', { exact: true }).getAttribute('type'),
+    'password',
+  )
+  await page.getByLabel('密码', { exact: true }).fill('')
+  await page.setViewportSize({ width: 1280, height: 900 })
   await page.evaluate(() => {
     window.__fengwoFixture.updateAvailable = true
   })
@@ -564,9 +641,31 @@ try {
     path: path.join(output, 'signed-out-update-mobile.png'),
     animations: 'disabled',
   })
+  const freshLogin = await context.newPage()
+  freshLogin.on('pageerror', (error) => errors.push(error.message))
+  await freshLogin.goto(`${origin}/nodes`)
+  await freshLogin.getByRole('status', { name: '正在恢复登录' }).waitFor()
+  assert.equal(await freshLogin.locator('nav').count(), 0)
+  await freshLogin.evaluate(() => window.__fengwoFixture.releaseRestore(null))
+  await freshLogin.getByRole('heading', { name: '登录', exact: true }).waitFor()
+  await checkLoginLayout(freshLogin, 'fresh', 1280, 900)
+  await freshLogin.reload()
+  await freshLogin.getByRole('status', { name: '正在恢复登录' }).waitFor()
+  await freshLogin.evaluate(() =>
+    window.__fengwoFixture.releaseRestore({
+      detail: 'profile_validation_failed',
+    }),
+  )
+  await freshLogin.getByText('配置校验失败，已保留上一次有效配置。').waitFor()
+  assert.equal(await freshLogin.locator('nav').count(), 0)
+  assert.equal(
+    await freshLogin.getByRole('switch', { name: '离线模式' }).count(),
+    0,
+  )
+  await freshLogin.close()
   assert.deepEqual(errors, [])
   console.log(
-    `UI smoke passed: ten desktop/mobile pages, global routing and persistence, node test, payment, offline, expired-session recovery and signed-out update. Screenshots: ${output}`,
+    `UI smoke passed: ten desktop/mobile pages, global routing and persistence, node test, payment, authenticated offline, isolated login/loading/expiry/logout, password visibility and signed-out update. Screenshots: ${output}`,
   )
 } finally {
   await browser.close()

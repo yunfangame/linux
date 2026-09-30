@@ -12,11 +12,17 @@ import {
   LogoutRounded,
   WifiOffRounded,
   LoginRounded,
+  MailOutlineRounded,
+  LockOutlined,
+  VisibilityOutlined,
+  VisibilityOffOutlined,
 } from '@mui/icons-material'
 import {
   Box,
   Button,
   CircularProgress,
+  IconButton,
+  InputAdornment,
   List,
   ListItemButton,
   ListItemIcon,
@@ -29,6 +35,7 @@ import {
 import { Fragment, type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'
 
+import loginBrand from '@/assets/image/fengwo-login-brand.png'
 import logo from '@/assets/image/fengwo-logo.png'
 import { useSystemProxyState } from '@/hooks/use-system-proxy-state'
 import { useVerge } from '@/hooks/use-verge'
@@ -140,7 +147,11 @@ export function SessionBoundary({ children }: { children: ReactNode }) {
   const { session, ready } = useFengwo()
   if (!ready)
     return (
-      <div className="fengwo-empty">
+      <div
+        className="fengwo-empty fengwo-session-loading"
+        role="status"
+        aria-label="正在恢复登录"
+      >
         <CircularProgress />
       </div>
     )
@@ -152,64 +163,143 @@ function LoginForm() {
   const { session, error } = useFengwo()
   const [email, setEmail] = useState(session?.summary.email ?? '')
   const [password, setPassword] = useState('')
+  const [passwordVisible, setPasswordVisible] = useState(false)
   const action = useAction()
   const { toggleSystemProxy } = useSystemProxyState()
   const { patchVerge } = useVerge()
   return (
     <Box className="fengwo-login">
-      <img src={logo} alt="蜂窝加速器" />
-      <Typography variant="h5" sx={{ fontWeight: 800 }}>
-        {session?.needsLogin ? '重新登录蜂窝加速器' : '登录蜂窝加速器'}
-      </Typography>
-      <Typography color="text.secondary">
-        {session?.needsLogin
-          ? '登录凭证已失效，本地订阅仍保留。'
-          : 'Linux 客户端'}
-      </Typography>
-      <Box
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void action.run(async () => {
-            await toggleSystemProxy(false)
-            await patchVerge({ enable_tun_mode: false })
-            await business('login', { email: email.trim(), password })
-            setPassword('')
-          })
-        }}
+      <section
+        className="fengwo-login-brand"
+        aria-label="蜂窝加速器 Linux 版本"
       >
-        <TextField
-          label="邮箱"
-          type="email"
-          value={email}
-          required
-          fullWidth
-          autoComplete="username"
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <TextField
-          label="密码"
-          type="password"
-          value={password}
-          required
-          fullWidth
-          autoComplete="current-password"
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        <Feedback error={action.error || error} />
-        <Button
-          type="submit"
-          variant="contained"
-          size="large"
-          fullWidth
-          disabled={action.busy}
-          startIcon={
-            action.busy ? <CircularProgress size={18} /> : <LoginRounded />
-          }
-        >
-          登录
-        </Button>
-      </Box>
+        <div className="fengwo-login-brand-content">
+          <img src={loginBrand} alt="蜂窝加速器" />
+          <Typography className="fengwo-login-edition">Linux 版本</Typography>
+          <Typography className="fengwo-login-slogan">
+            更快，更稳，更实惠
+          </Typography>
+        </div>
+        <Typography className="fengwo-login-copyright">
+          蜂窝加速器 · 2.5.6
+        </Typography>
+      </section>
+      <main className="fengwo-login-panel">
+        <div className="fengwo-login-tools">
+          <UpdateNotice />
+        </div>
+        <div className="fengwo-login-content">
+          <header>
+            <Typography component="h1" className="fengwo-login-title">
+              {session?.needsLogin ? '重新登录' : '登录'}
+            </Typography>
+            <Typography className="fengwo-login-welcome">
+              {session?.needsLogin
+                ? '登录凭证已失效，请重新登录您的账号。'
+                : '欢迎回来，请登录您的账号'}
+            </Typography>
+          </header>
+          <Box
+            component="form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void action.run(async () => {
+                await toggleSystemProxy(false)
+                await patchVerge({ enable_tun_mode: false })
+                await business('login', { email: email.trim(), password })
+                setPassword('')
+                setPasswordVisible(false)
+              })
+            }}
+          >
+            <div className="fengwo-login-field">
+              <Typography component="label" htmlFor="fengwo-login-email">
+                邮箱
+              </Typography>
+              <TextField
+                id="fengwo-login-email"
+                type="email"
+                value={email}
+                required
+                fullWidth
+                autoComplete="username"
+                disabled={action.busy}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <MailOutlineRounded />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </div>
+            <div className="fengwo-login-field">
+              <Typography component="label" htmlFor="fengwo-login-password">
+                密码
+              </Typography>
+              <TextField
+                id="fengwo-login-password"
+                type={passwordVisible ? 'text' : 'password'}
+                value={password}
+                required
+                fullWidth
+                autoComplete="current-password"
+                disabled={action.busy}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockOutlined />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Tooltip
+                          title={passwordVisible ? '隐藏密码' : '显示密码'}
+                        >
+                          <IconButton
+                            type="button"
+                            aria-label={
+                              passwordVisible ? '隐藏密码' : '显示密码'
+                            }
+                            aria-pressed={passwordVisible}
+                            disabled={action.busy}
+                            onClick={() => setPasswordVisible(!passwordVisible)}
+                            edge="end"
+                          >
+                            {passwordVisible ? (
+                              <VisibilityOffOutlined />
+                            ) : (
+                              <VisibilityOutlined />
+                            )}
+                          </IconButton>
+                        </Tooltip>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+            <Feedback error={action.error || error} />
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              fullWidth
+              disabled={action.busy}
+              endIcon={
+                action.busy ? <CircularProgress size={18} /> : <LoginRounded />
+              }
+            >
+              登录
+            </Button>
+          </Box>
+        </div>
+      </main>
     </Box>
   )
 }
