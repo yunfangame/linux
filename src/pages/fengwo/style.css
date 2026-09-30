@@ -257,6 +257,44 @@
   background: #7898bb;
   color: #fff;
 }
+@media (min-width: 761px) and (max-height: 720px) {
+  .fengwo-login-brand {
+    padding: 20px 28px;
+  }
+  .fengwo-login-brand-content {
+    max-width: 280px;
+  }
+  .fengwo-login-slogan.MuiTypography-root {
+    margin-top: 24px;
+  }
+  .fengwo-login-copyright.MuiTypography-root {
+    margin-top: 20px;
+  }
+  .fengwo-login-panel {
+    padding: 16px 40px 24px;
+  }
+  .fengwo-login-tools {
+    margin-bottom: 16px;
+  }
+  .fengwo-login-title.MuiTypography-root {
+    font-size: 36px;
+  }
+  .fengwo-login-welcome.MuiTypography-root {
+    font-size: 16px;
+    margin-top: 12px;
+  }
+  .fengwo-login form {
+    margin-top: 28px;
+    gap: 22px;
+  }
+  .fengwo-login-field {
+    gap: 10px;
+  }
+  .fengwo-login-field .MuiOutlinedInput-root,
+  .fengwo-login form > .MuiButton-root {
+    min-height: 56px;
+  }
+}
 @media (max-width: 760px) {
   .fengwo-login {
     grid-template-columns: minmax(0, 1fr);

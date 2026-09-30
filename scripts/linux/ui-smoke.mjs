@@ -566,9 +566,6 @@ try {
       path: path.join(output, `login-${name}.png`),
       animations: 'disabled',
     })
-    await target
-      .getByRole('button', { name: '登录', exact: true })
-      .scrollIntoViewIfNeeded()
     const button = await target
       .getByRole('button', { name: '登录', exact: true })
       .boundingBox()
