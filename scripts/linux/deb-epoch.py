@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory(prefix="fengwo-deb-") as directory:
     if fields["Package"] != "fengwo-linux" or fields["Version"] != version:
         raise ValueError("Unexpected Debian package identity or version")
     fields["Version"] = f"{int(epoch)}:{version}"
-    with control.open("w", encoding="utf-8") as stream:
+    with control.open("wb") as stream:
         fields.dump(stream)
     subprocess.run(
         ["dpkg-deb", "--root-owner-group", "--build", directory, destination],
