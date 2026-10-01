@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const invokeMock = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
 
-import { billedBytes, bytes, date, money, paymentPayload } from './fengwo'
+import {
+  billedBytes,
+  bytes,
+  date,
+  errorText,
+  money,
+  paymentPayload,
+} from './fengwo'
 
 describe('business data', () => {
   it('prices use integer cents', () => {
@@ -61,6 +68,24 @@ describe('account boundaries', () => {
       sessionId: 'a',
     })
   })
+  it('retries failed restoration without logging in again', async () => {
+    const api = await import('./fengwo')
+    invokeMock.mockRejectedValueOnce({ detail: 'profile_busy' })
+    await api.restoreSession()
+    invokeMock.mockResolvedValueOnce({ id: 'a', summary: {}, offline: false })
+    await api.restoreSession()
+    invokeMock.mockResolvedValueOnce([])
+    await api.business('orders')
+    expect(invokeMock.mock.calls.slice(0, 2)).toEqual([
+      ['fengwo_action', { action: 'session' }],
+      ['fengwo_action', { action: 'session' }],
+    ])
+    expect(invokeMock).toHaveBeenLastCalledWith('fengwo_action', {
+      action: 'orders',
+      payload: {},
+      sessionId: 'a',
+    })
+  })
   it('rejects a late response after logout instead of displaying another account', async () => {
     const api = await import('./fengwo')
     invokeMock.mockResolvedValueOnce({ id: 'a', summary: {}, offline: false })
@@ -83,14 +108,12 @@ describe('account boundaries', () => {
     invokeMock.mockResolvedValueOnce({ id: 'a', summary: {}, offline: false })
     await api.restoreSession()
     const error = { detail: 'authentication_expired' }
-    invokeMock
-      .mockRejectedValueOnce(error)
-      .mockResolvedValueOnce({
-        id: 'a',
-        summary: {},
-        offline: false,
-        needsLogin: true,
-      })
+    invokeMock.mockRejectedValueOnce(error).mockResolvedValueOnce({
+      id: 'a',
+      summary: {},
+      offline: false,
+      needsLogin: true,
+    })
     await expect(api.business('createOrder')).rejects.toEqual(error)
     expect(invokeMock).toHaveBeenLastCalledWith('fengwo_action', {
       action: 'sessionState',
@@ -110,4 +133,12 @@ describe('account boundaries', () => {
     })
     expect(invokeMock).toHaveBeenCalledTimes(2)
   })
+})
+
+it.each([
+  ['network_timeout', '服务器响应超时，请稍后重试。'],
+  ['response_incomplete', '服务器响应接收中断，请稍后重试。'],
+  ['profile_busy', '内核仍在加载配置，请稍后重试。'],
+])('shows an actionable message for %s', (detail, message) => {
+  expect(errorText({ detail })).toBe(message)
 })

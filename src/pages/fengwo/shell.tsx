@@ -16,6 +16,7 @@ import {
   LockOutlined,
   VisibilityOutlined,
   VisibilityOffOutlined,
+  RefreshRounded,
 } from '@mui/icons-material'
 import {
   Box,
@@ -41,6 +42,7 @@ import { useSystemProxyState } from '@/hooks/use-system-proxy-state'
 import { useVerge } from '@/hooks/use-verge'
 import {
   business,
+  restoreSession,
   useAction,
   useFengwo,
   useSessionInit,
@@ -144,7 +146,7 @@ export function FengwoSidebar() {
 }
 export function SessionBoundary({ children }: { children: ReactNode }) {
   useSessionInit()
-  const { session, ready } = useFengwo()
+  const { session, ready, error } = useFengwo()
   if (!ready)
     return (
       <div
@@ -154,6 +156,21 @@ export function SessionBoundary({ children }: { children: ReactNode }) {
       >
         <CircularProgress />
       </div>
+    )
+  if (error)
+    return (
+      <Box className="fengwo-session-recovery">
+        <Typography component="h1" variant="h6">
+          恢复登录暂未完成
+        </Typography>
+        <Feedback error={error} />
+        <Button
+          startIcon={<RefreshRounded />}
+          onClick={() => void restoreSession()}
+        >
+          重试恢复
+        </Button>
+      </Box>
     )
   if (session && (!session.needsLogin || session.offline))
     return <Fragment key={session.id}>{children}</Fragment>

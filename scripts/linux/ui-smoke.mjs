@@ -150,7 +150,7 @@ try {
     ]
     window.__fengwoCalls = []
     let releaseRestore
-    const restoring = new Promise((resolve) => {
+    let restoring = new Promise((resolve) => {
       releaseRestore = resolve
     })
     window.__fengwoFixture = {
@@ -159,6 +159,9 @@ try {
       releaseRestore: (value) => {
         if (value === null) session = null
         releaseRestore(value)
+      },
+      recoverRestore: () => {
+        restoring = Promise.resolve()
       },
     }
     let callbackId = 0
@@ -654,11 +657,19 @@ try {
     }),
   )
   await freshLogin.getByText('配置校验失败，已保留上一次有效配置。').waitFor()
+  await freshLogin.getByRole('heading', { name: '恢复登录暂未完成' }).waitFor()
+  assert.equal(await freshLogin.locator('form').count(), 0)
   assert.equal(await freshLogin.locator('nav').count(), 0)
   assert.equal(
     await freshLogin.getByRole('switch', { name: '离线模式' }).count(),
     0,
   )
+  await freshLogin.evaluate(() => window.__fengwoFixture.recoverRestore())
+  await freshLogin.getByRole('button', { name: '重试恢复' }).click()
+  await freshLogin
+    .getByRole('heading', { name: '节点状态', exact: true })
+    .waitFor()
+  assert.equal(await freshLogin.locator('.fengwo-nav a').count(), 10)
   await freshLogin.close()
   assert.deepEqual(errors, [])
   console.log(

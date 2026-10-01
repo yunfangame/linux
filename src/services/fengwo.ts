@@ -122,14 +122,20 @@ function subscribe(listener: () => void) {
 }
 let restoring: Promise<void> | undefined
 export function restoreSession() {
-  restoring ??= invoke<Session | null>('fengwo_action', { action: 'session' })
+  if (restoring) return restoring
+  state = { ...state, ready: false, error: undefined }
+  emit()
+  restoring = invoke<Session | null>('fengwo_action', { action: 'session' })
     .then((session) => {
       state = { session, ready: true }
       emit()
     })
     .catch((error) => {
-      state = { session: null, ready: true, error: errorText(error) }
+      state = { ...state, ready: true, error: errorText(error) }
       emit()
+    })
+    .finally(() => {
+      restoring = undefined
     })
   return restoring
 }
@@ -247,6 +253,9 @@ export function errorText(error: unknown): string {
       '当前构建缺少蜂窝配置密钥，请安装正式 Linux 版本。',
     configuration_unavailable: '无法获取服务配置，请检查网络后重试。',
     network_unavailable: '网络暂时不可用，请稍后重试。',
+    network_timeout: '服务器响应超时，请稍后重试。',
+    response_incomplete: '服务器响应接收中断，请稍后重试。',
+    invalid_response: '服务器返回的数据无效，请稍后重试。',
     authentication_expired: '登录已失效，请重新登录。',
     device_not_registered: '设备凭证已失效，请重新登录。',
     device_limit_reached: '已达到设备数量上限，请先移除其他设备。',
@@ -265,6 +274,7 @@ export function errorText(error: unknown): string {
     subscription_required: '请先在加速主页更新订阅。',
     profile_validation_failed: '配置校验失败，已保留上一次有效配置。',
     profile_activation_failed: '配置未能生效，请检查内核状态。',
+    profile_busy: '内核仍在加载配置，请稍后重试。',
     payment_method_required: '请选择支付方式。',
     not_in_gray_allowlist: '此账号尚未开通安全订阅，请联系管理员。',
     unknown_operation: '服务端暂不支持此操作，请联系管理员升级服务端。',

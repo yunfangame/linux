@@ -1,9 +1,11 @@
 use super::{CmdResult, StringifyErr as _, fengwo_crypto as crypto};
 use crate::{
     config::{Config, IProfiles, PrfItem, PrfOption, decrypt_data, encrypt_data},
+    core::validate::ValidationOutcome,
     utils::dirs,
 };
 use anyhow::{Result, anyhow, bail, ensure};
+use clash_verge_logging::{Type, logging};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::LazyLock, time::Duration};
@@ -81,7 +83,7 @@ fn safe_origin(value: &str) -> Result<reqwest::Url> {
     Ok(url)
 }
 pub(super) async fn read_json(request: reqwest::RequestBuilder) -> Result<Value> {
-    let mut response = request.send().await.map_err(|_| anyhow!("network_unavailable"))?;
+    let mut response = request.send().await.map_err(|error| transport_error(&error, false))?;
     let status = response.status();
     if status.as_u16() == 401 || status.as_u16() == 403 {
         bail!("authentication_expired");
@@ -95,11 +97,32 @@ pub(super) async fn read_json(request: reqwest::RequestBuilder) -> Result<Value>
         "response_too_large"
     );
     let mut data = Vec::new();
-    while let Some(chunk) = response.chunk().await? {
+    while let Some(chunk) = response.chunk().await.map_err(|error| transport_error(&error, true))? {
         ensure!(data.len() + chunk.len() <= 16 * 1024 * 1024, "response_too_large");
         data.extend_from_slice(&chunk);
     }
     serde_json::from_slice(&data).map_err(|_| anyhow!("invalid_response"))
+}
+fn transport_error(error: &reqwest::Error, reading_body: bool) -> anyhow::Error {
+    // Do not surface URLs, credentials or response contents from reqwest errors.
+    anyhow!(if error.is_timeout() {
+        "network_timeout"
+    } else if reading_body {
+        "response_incomplete"
+    } else {
+        "network_unavailable"
+    })
+}
+fn retryable_transport(error: &anyhow::Error) -> bool {
+    matches!(
+        error.to_string().as_str(),
+        "network_timeout"
+            | "network_unavailable"
+            | "response_incomplete"
+            | "request_rejected_502"
+            | "request_rejected_503"
+            | "request_rejected_504"
+    )
 }
 async fn load() -> Result<Store> {
     let home = dirs::app_home_dir()?;
@@ -206,10 +229,13 @@ pub(super) async fn update_config(refresh: bool) -> Result<Value> {
 async fn secure(store: &Store, endpoint: &str, payload: Value) -> Result<Value> {
     let config = secure_config(store)?;
     let url = safe_origin(endpoint)?.join(crypto::field(config, "gatewayPath")?)?;
+    // Subscription bodies are much larger than metadata; retain a finite total deadline.
+    let timeout = Duration::from_secs(if payload["op"] == "redeem_ticket" { 45 } else { 20 });
     let request = crypto::Request::new(config, &crypto::decode(&store.seed)?, payload)?;
     let response = read_json(
         client()?
             .post(url)
+            .timeout(timeout)
             .header("Cache-Control", "no-store")
             .json(&request.envelope),
     )
@@ -311,7 +337,11 @@ async fn login(store: &mut Store, payload: &Value) -> Result<()> {
             Err(error) => {
                 if !matches!(
                     error.to_string().as_str(),
-                    "network_unavailable" | "request_rejected_502" | "request_rejected_503" | "request_rejected_504"
+                    "network_unavailable"
+                        | "network_timeout"
+                        | "request_rejected_502"
+                        | "request_rejected_503"
+                        | "request_rejected_504"
                 ) {
                     return Err(error);
                 }
@@ -398,7 +428,37 @@ fn runtime_profile(account: &Account) -> Result<String> {
 fn valid_probe(value: &str) -> bool {
     reqwest::Url::parse(value).is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.host_str().is_some())
 }
+async fn apply_when_ready<Apply, ApplyFuture>(mut apply: Apply, failure: &'static str) -> Result<()>
+where
+    Apply: FnMut() -> ApplyFuture,
+    ApplyFuture: std::future::Future<Output = Result<ValidationOutcome>>,
+{
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        match apply().await? {
+            ValidationOutcome::Valid => return Ok(()),
+            ValidationOutcome::Busy => {
+                ensure!(tokio::time::Instant::now() < deadline, "profile_busy");
+                // Busy rolls back the attempted profile update; retry only this transient outcome.
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+            _ => bail!(failure),
+        }
+    }
+}
 async fn apply_account(account: &mut Account) -> Result<()> {
+    // The window opens before core initialization completes; do not compete with startup writes.
+    apply_when_ready(
+        || async {
+            Ok(if crate::utils::resolve::is_resolve_done() {
+                ValidationOutcome::Valid
+            } else {
+                ValidationOutcome::Busy
+            })
+        },
+        "profile_activation_failed",
+    )
+    .await?;
     let yaml = runtime_profile(account)?;
     let exists = match &account.profile_uid {
         Some(uid) => Config::profiles().await.latest_arc().get_item(uid).is_ok(),
@@ -406,10 +466,18 @@ async fn apply_account(account: &mut Account) -> Result<()> {
     };
     if exists {
         let uid = account.profile_uid.as_ref().ok_or_else(|| anyhow!("profile_missing"))?;
-        let outcome = super::save_profile_file(uid.clone().into(), Some(yaml.into()))
-            .await
-            .map_err(|e| anyhow!(e.to_string()))?;
-        ensure!(outcome.is_valid(), "profile_validation_failed");
+        apply_when_ready(
+            || async {
+                super::save_profile_file(uid.clone().into(), Some(yaml.clone().into()))
+                    .await
+                    .map_err(|e| anyhow!(e.to_string()))
+            },
+            "profile_validation_failed",
+        )
+        .await?;
+        if Config::profiles().await.latest_arc().current.as_deref() == Some(uid.as_str()) {
+            return Ok(());
+        }
     } else {
         let source = PrfItem {
             itype: Some("local".into()),
@@ -425,23 +493,57 @@ async fn apply_account(account: &mut Account) -> Result<()> {
         crate::config::profiles::profiles_save_file_safe().await?;
         account.profile_uid = item.uid.map(|v| v.to_string());
     }
-    let outcome = super::patch_profiles_config(IProfiles {
-        current: account.profile_uid.clone().map(Into::into),
-        ..Default::default()
-    })
+    apply_when_ready(
+        || async {
+            super::patch_profiles_config(IProfiles {
+                current: account.profile_uid.clone().map(Into::into),
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| anyhow!(e.to_string()))
+        },
+        "profile_activation_failed",
+    )
     .await
-    .map_err(|e| anyhow!(e.to_string()))?;
-    ensure!(outcome.is_valid(), "profile_activation_failed");
-    Ok(())
+}
+async fn fetch_subscription<Call, CallFuture>(mut call: Call) -> Result<Value>
+where
+    Call: FnMut(&'static str, Value) -> CallFuture,
+    CallFuture: std::future::Future<Output = Result<Value>>,
+{
+    for attempt in 0..2 {
+        let mut stage = "issue_ticket";
+        let started = std::time::Instant::now();
+        let result = async {
+            let issued = call(stage, json!({})).await?;
+            stage = "redeem_ticket";
+            call(stage, json!({"ticket":crypto::field(&issued,"ticket")?})).await
+        }
+        .await;
+        match result {
+            Ok(value) => return Ok(value),
+            Err(error) if retryable_transport(&error) => {
+                logging!(
+                    warn,
+                    Type::Network,
+                    "Fengwo subscription {stage} attempt {} failed: {} ({} ms)",
+                    attempt + 1,
+                    error,
+                    started.elapsed().as_millis()
+                );
+                if attempt == 1 {
+                    return Err(error);
+                }
+                // Redemption consumes a ticket even if its response is lost. Obtain a new ticket and envelope.
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!()
 }
 async fn sync_profile(store: &mut Store) -> Result<()> {
-    let issued = signed(store, "issue_ticket", json!({})).await?;
-    let redeemed = signed(
-        store,
-        "redeem_ticket",
-        json!({"ticket":crypto::field(&issued,"ticket")?}),
-    )
-    .await?;
+    let redeemed = fetch_subscription(|op, payload| signed(store, op, payload)).await?;
     ensure!(
         redeemed["content_encoding"] == "base64url",
         "unsupported_content_encoding"
@@ -766,6 +868,141 @@ pub async fn fengwo_action(action: String, payload: Option<Value>, session_id: O
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{collections::VecDeque, future::ready};
+
+    #[tokio::test(start_paused = true)]
+    async fn fengwo_profile_wait_retries_busy_but_not_invalid_or_failed_updates() {
+        let mut outcomes = VecDeque::from([Ok(ValidationOutcome::Busy), Ok(ValidationOutcome::Valid)]);
+        apply_when_ready(|| ready(outcomes.pop_front().unwrap()), "profile_validation_failed")
+            .await
+            .unwrap();
+        assert!(outcomes.is_empty());
+
+        let mut outcomes = VecDeque::from([
+            Ok(ValidationOutcome::invalid_from_message("invalid yaml")),
+            Ok(ValidationOutcome::Valid),
+        ]);
+        let error = apply_when_ready(|| ready(outcomes.pop_front().unwrap()), "profile_validation_failed")
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "profile_validation_failed");
+        assert_eq!(outcomes.len(), 1);
+
+        let mut calls = 0;
+        let error = apply_when_ready(
+            || {
+                calls += 1;
+                ready(Err(anyhow!("write_failed")))
+            },
+            "profile_validation_failed",
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_string(), "write_failed");
+        assert_eq!(calls, 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fengwo_profile_busy_has_a_bounded_wait() {
+        let started = tokio::time::Instant::now();
+        let error = apply_when_ready(|| ready(Ok(ValidationOutcome::Busy)), "profile_validation_failed")
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "profile_busy");
+        assert_eq!(started.elapsed(), Duration::from_secs(30));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fengwo_subscription_retry_uses_a_new_ticket() {
+        let mut replies = VecDeque::from([
+            Ok(json!({"ticket":"first"})),
+            Err(anyhow!("response_incomplete")),
+            Ok(json!({"ticket":"second"})),
+            Ok(json!({"profile":"ok"})),
+        ]);
+        let mut calls = Vec::new();
+        let value = fetch_subscription(|op, payload| {
+            calls.push((op, payload));
+            ready(replies.pop_front().unwrap())
+        })
+        .await
+        .unwrap();
+        assert_eq!(value["profile"], "ok");
+        assert_eq!(
+            calls,
+            vec![
+                ("issue_ticket", json!({})),
+                ("redeem_ticket", json!({"ticket":"first"})),
+                ("issue_ticket", json!({})),
+                ("redeem_ticket", json!({"ticket":"second"})),
+            ]
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fengwo_subscription_retry_is_bounded_and_excludes_auth_and_invalid_data() {
+        for (code, expected) in [
+            ("network_timeout", 2),
+            ("response_incomplete", 2),
+            ("request_rejected_503", 2),
+            ("authentication_expired", 1),
+            ("device_not_registered", 1),
+            ("rate_limited", 1),
+            ("invalid_ticket", 1),
+            ("invalid_response", 1),
+            ("invalid_signature", 1),
+            ("subscription_unavailable", 1),
+        ] {
+            let mut calls = 0;
+            let error = fetch_subscription(|_, _| {
+                calls += 1;
+                ready(Err(anyhow!(code)))
+            })
+            .await
+            .unwrap_err();
+            assert_eq!(error.to_string(), code);
+            assert_eq!(calls, expected, "{code}");
+        }
+    }
+
+    #[tokio::test]
+    async fn fengwo_json_classifies_incomplete_and_timed_out_bodies() {
+        use std::io::{Read as _, Write as _};
+        for (body, declared_length, stall, expected) in [
+            ("{", 8, false, "response_incomplete"),
+            ("{", 8, true, "network_timeout"),
+            ("{", 1, false, "invalid_response"),
+        ] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                let mut request = [0; 4096];
+                let _ = stream.read(&mut request).unwrap();
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {declared_length}\r\nConnection: close\r\n\r\n{body}"
+                )
+                .unwrap();
+                stream.flush().unwrap();
+                if stall {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            });
+            let error = read_json(
+                client()
+                    .unwrap()
+                    .get(format!("http://{address}/"))
+                    .timeout(Duration::from_millis(500)),
+            )
+            .await
+            .unwrap_err();
+            server.join().unwrap();
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+
     fn session_fixture() -> Session {
         serde_json::from_value(json!({
             "id":"old-session","endpoint":"https://example.org","auth":"secret",

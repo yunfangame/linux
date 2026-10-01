@@ -137,6 +137,16 @@
 .fengwo-session-loading {
   flex: 1;
 }
+.fengwo-session-recovery {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+}
 .fengwo-login {
   flex: 1;
   min-height: 0;
