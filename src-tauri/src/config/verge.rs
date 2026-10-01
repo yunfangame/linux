@@ -308,6 +308,8 @@ impl IVerge {
                     {
                         config.start_page = Some(String::from("/"));
                     }
+                    #[cfg(target_os = "linux")]
+                    config.language.get_or_insert_with(|| "zh".into());
                     config
                 }
                 Err(err) => {
@@ -327,6 +329,9 @@ impl IVerge {
             app_log_max_size: Some(128),
             app_log_max_count: Some(8),
             clash_core: Some("verge-mihomo".into()),
+            #[cfg(target_os = "linux")]
+            language: Some("zh".into()),
+            #[cfg(not(target_os = "linux"))]
             language: Some(clash_verge_i18n::system_language().into()),
             theme_mode: Some("system".into()),
             #[cfg(not(target_os = "windows"))]
@@ -509,5 +514,21 @@ impl IVerge {
         } else {
             LevelFilter::Info
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::IVerge;
+
+    #[test]
+    fn fengwo_linux_defaults_to_chinese_and_keeps_language_changes() {
+        let mut config = IVerge::template();
+        assert_eq!(config.language.as_deref(), Some("zh"));
+        config.patch_config(&IVerge {
+            language: Some("en".into()),
+            ..Default::default()
+        });
+        assert_eq!(config.language.as_deref(), Some("en"));
     }
 }

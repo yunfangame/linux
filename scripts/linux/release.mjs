@@ -1,5 +1,8 @@
 import { readFile } from 'node:fs/promises'
 
+// The branded 1.x series must sort after the upstream-numbered test packages.
+export const packageEpoch = 1
+
 export function buildNumber(value) {
   if (!/^[1-9]\d*$/.test(String(value)) || !Number.isSafeInteger(Number(value)))
     throw new Error('FENGWO_BUILD_NUMBER must be a positive safe integer.')
@@ -21,8 +24,12 @@ export function validatePackage(metadata, arch, format, release) {
     throw new Error(`Architecture mismatch: ${arch}.${format}`)
   if (metadata.name !== 'fengwo-linux')
     throw new Error(`Package name mismatch: ${arch}.${format}`)
-  if (metadata.version !== release.version)
+  const version =
+    format === 'deb' ? `${packageEpoch}:${release.version}` : release.version
+  if (metadata.version !== version)
     throw new Error(`Version mismatch: ${arch}.${format}`)
+  if (format === 'rpm' && metadata.epoch !== String(packageEpoch))
+    throw new Error(`RPM epoch mismatch: ${arch}.${format}`)
   if (format === 'rpm' && metadata.release !== String(release.buildNumber))
     throw new Error(`RPM release mismatch: ${arch}.${format}`)
 }

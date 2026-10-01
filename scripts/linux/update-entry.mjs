@@ -3,10 +3,10 @@ import { createReadStream } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { releaseInfo } from './release.mjs'
 
-const [installer, output] = process.argv.slice(2)
+const [installer, output, manifestOutput] = process.argv.slice(2)
 if (!installer || !output)
   throw new Error(
-    'Usage: node scripts/linux/update-entry.mjs INSTALLER.run OUTPUT.json',
+    'Usage: node scripts/linux/update-entry.mjs INSTALLER.run OUTPUT.json [PLAINTEXT_MANIFEST.json]',
   )
 const release = await releaseInfo()
 const metadata = JSON.parse(await readFile(`${installer}.json`, 'utf8'))
@@ -35,6 +35,12 @@ const entry = {
   },
 }
 await writeFile(output, `${JSON.stringify(entry, null, 2)}\n`)
+if (manifestOutput) {
+  await writeFile(
+    manifestOutput,
+    `${JSON.stringify({ Authentication: 'FengWo', format: 'fengwo-update', schemaVersion: 1, packages: entry }, null, 2)}\n`,
+  )
+}
 console.log(
   `Wrote ${output}. Merge into the existing update manifest's packages, then encrypt and sign using the existing config publisher.`,
 )

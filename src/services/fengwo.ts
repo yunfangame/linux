@@ -150,7 +150,6 @@ const sessionActions = new Set([
   'summary',
   'saveRules',
   'resetSecurity',
-  'setCampus',
   'cfApply',
 ])
 export async function business<T = unknown>(
@@ -261,6 +260,14 @@ export function errorText(error: unknown): string {
     device_limit_reached: '已达到设备数量上限，请先移除其他设备。',
     request_expired: '系统时间与服务器不一致，请校准时间后重试。',
     update_check_failed: '更新检查失败，请检查网络后重试。',
+    update_not_found: '更新文件不存在，请联系管理员检查发布地址。',
+    update_access_denied: '更新地址拒绝访问，请联系管理员检查下载权限。',
+    update_redirect_rejected: '更新地址发生跳转，请使用 HTTPS 文件直链。',
+    update_signature_invalid: '更新配置签名校验失败，已拒绝更新。',
+    update_decryption_failed: '更新配置解密失败，请检查发布密钥。',
+    update_config_invalid: '更新配置格式无效，请使用加密签名后的配置。',
+    update_manifest_invalid: '更新包信息无效，请检查版本、下载地址和校验值。',
+    no_update_available: '当前没有可安装的更新，请重新检查。',
     update_install_failed: '安装未完成，请检查管理员授权和软件源后重试。',
     update_busy: '已有更新正在安装。',
     update_hash_mismatch: '安装包校验失败，请重新下载。',

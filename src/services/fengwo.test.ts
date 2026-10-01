@@ -13,6 +13,13 @@ import {
 } from './fengwo'
 
 describe('business data', () => {
+  it.each([
+    ['update_not_found', '更新文件不存在，请联系管理员检查发布地址。'],
+    ['update_signature_invalid', '更新配置签名校验失败，已拒绝更新。'],
+    ['update_config_invalid', '更新配置格式无效，请使用加密签名后的配置。'],
+  ])('explains update failure %s', (detail, expected) => {
+    expect(errorText({ code: 'FENGWO_UPDATE_FAILED', detail })).toBe(expected)
+  })
   it('prices use integer cents', () => {
     expect(money(1999)).toBe('¥19.99')
     expect(money(0)).toBe('¥0.00')

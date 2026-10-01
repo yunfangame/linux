@@ -52,11 +52,11 @@ async function fixture(manager = 'apt') {
   await script('id', 'printf "0\\n"')
   await script(
     'dpkg-deb',
-    'case "$3" in Package) printf "%s" "${TEST_NAME:-fengwo-linux}";; Version) printf "%s" "${TEST_VERSION:-$PACKAGE_VERSION}";; Architecture) case "$2" in *aarch64*) printf arm64;; *) printf amd64;; esac;; esac',
+    'case "$3" in Package) printf "%s" "${TEST_NAME:-fengwo-linux}";; Version) printf "%s" "${TEST_VERSION:-1:$PACKAGE_VERSION}";; Architecture) case "$2" in *aarch64*) printf arm64;; *) printf amd64;; esac;; esac',
   )
   await script(
     'rpm',
-    'case "$3" in "%{NAME}") printf "%s" "${TEST_NAME:-fengwo-linux}";; "%{VERSION}") printf "%s" "${TEST_VERSION:-$PACKAGE_VERSION}";; "%{RELEASE}") printf "%s" "$FENGWO_BUILD_NUMBER";; "%{ARCH}") case "$4" in *aarch64*) printf aarch64;; *) printf x86_64;; esac;; esac',
+    'case "$3" in "%{NAME}") printf "%s" "${TEST_NAME:-fengwo-linux}";; "%{VERSION}") printf "%s" "${TEST_VERSION:-$PACKAGE_VERSION}";; "%{RELEASE}") printf "%s" "$FENGWO_BUILD_NUMBER";; "%{EPOCH}") printf "%s" "${TEST_EPOCH:-1}";; "%{ARCH}") case "$4" in *aarch64*) printf aarch64;; *) printf x86_64;; esac;; esac',
   )
   if (manager === 'apt') {
     await script('dpkg', ':')
@@ -164,10 +164,12 @@ test('update entries use the verified bundle metadata rather than an unrelated b
   const f = await fixture()
   try {
     const output = path.join(f.dir, 'entry.json')
+    const manifest = path.join(f.dir, 'update.plaintext.json')
     const args = [
       path.join(root, 'scripts/linux/update-entry.mjs'),
       f.installer,
       output,
+      manifest,
     ]
     const env = {
       ...f.env,
@@ -177,6 +179,12 @@ test('update entries use the verified bundle metadata rather than an unrelated b
     const entry = JSON.parse(await readFile(output, 'utf8'))['linux-universal']
     assert.equal(entry.buildNumber, 2)
     assert.equal(entry.version, f.env.PACKAGE_VERSION)
+    assert.deepEqual(JSON.parse(await readFile(manifest, 'utf8')), {
+      Authentication: 'FengWo',
+      format: 'fengwo-update',
+      schemaVersion: 1,
+      packages: { 'linux-universal': entry },
+    })
     assert.notEqual(
       spawnSync(process.execPath, args, {
         env: { ...env, FENGWO_BUILD_NUMBER: '3' },
@@ -206,11 +214,13 @@ test('release numbers and all package metadata must agree across architectures',
     arch: 'aarch64',
     version: release.version,
     release: '2',
+    epoch: '1',
   }
   assert.doesNotThrow(() => validatePackage(meta, 'aarch64', 'rpm', release))
   for (const overrides of [
     { arch: 'x86_64' },
     { release: '1' },
+    { epoch: '0' },
     { name: 'clash-verge' },
     { version: '2.5.6' },
   ]) {
@@ -232,6 +242,45 @@ test('extracts only to a new directory and leaves installation untouched', async
     await assert.rejects(readFile(f.env.TEST_LOG))
   } finally {
     await rm(f.dir, { recursive: true, force: true })
+  }
+})
+test('native Debian epoch migration sorts after upstream-numbered test packages', {
+  skip: process.platform !== 'linux',
+}, async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'fengwo-epoch-test-'))
+  try {
+    const stage = path.join(directory, 'package')
+    await mkdir(path.join(stage, 'DEBIAN'), { recursive: true })
+    await mkdir(path.join(stage, 'usr/share/fengwo'), { recursive: true })
+    await writeFile(path.join(stage, 'usr/share/fengwo/check'), 'payload')
+    const release = await releaseInfo('7')
+    await writeFile(
+      path.join(stage, 'DEBIAN/control'),
+      `Package: fengwo-linux\nVersion: ${release.version}\nArchitecture: all\nMaintainer: Fengwo QA <qa@example.org>\nDescription: Fengwo migration fixture\n preserved continuation\n`,
+    )
+    const source = path.join(directory, 'source.deb')
+    const output = path.join(directory, 'epoch.deb')
+    execFileSync('dpkg-deb', ['--root-owner-group', '--build', stage, source])
+    execFileSync('python3', [
+      path.join(root, 'scripts/linux/deb-epoch.py'),
+      source,
+      output,
+      release.version,
+      '1',
+    ])
+    const version = execFileSync('dpkg-deb', ['-f', output, 'Version'], {
+      encoding: 'utf8',
+    }).trim()
+    assert.equal(version, `1:${release.version}`)
+    execFileSync('dpkg', ['--compare-versions', version, 'gt', '2.5.6+6'])
+    assert.match(
+      execFileSync('dpkg-deb', ['-f', output, 'Description'], {
+        encoding: 'utf8',
+      }),
+      /preserved continuation/,
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 })
 test('reports a missing gzip dependency before trying to extract or install', async () => {

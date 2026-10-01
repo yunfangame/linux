@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
-import { releaseInfo } from './release.mjs'
+import { packageEpoch, releaseInfo } from './release.mjs'
 
 if (process.platform !== 'linux')
   throw new Error('Fengwo release packages must be built on Linux.')
@@ -27,7 +27,9 @@ for (const key of [
 }
 const releaseConfig = {
   version: release.version,
-  bundle: { linux: { rpm: { release: env.FENGWO_BUILD_NUMBER } } },
+  bundle: {
+    linux: { rpm: { release: env.FENGWO_BUILD_NUMBER, epoch: packageEpoch } },
+  },
 }
 const result = spawnSync(
   'pnpm',

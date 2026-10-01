@@ -1,36 +1,22 @@
 import {
   BuildOutlined,
-  CloudOutlined,
-  LanguageRounded,
   LinkRounded,
   LocationOnOutlined,
   MovieOutlined,
   OpenInNewRounded,
-  SpeedRounded,
 } from '@mui/icons-material'
 import {
-  Alert,
   Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
-  Switch,
   Tab,
   Tabs,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
-  MenuItem,
-  TextField,
 } from '@mui/material'
 import { invoke } from '@tauri-apps/api/core'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import useSWR from 'swr'
@@ -41,13 +27,7 @@ import SettingVergeAdvanced from '@/components/setting/setting-verge-advanced'
 import SettingVergeBasic from '@/components/setting/setting-verge-basic'
 import { useSystemState } from '@/hooks/use-system-state'
 import { exportDiagnosticInfo, openLogsDir } from '@/services/cmds'
-import {
-  business,
-  bytes,
-  useAction,
-  useBusiness,
-  useFengwo,
-} from '@/services/fengwo'
+import { business, useAction, useFengwo } from '@/services/fengwo'
 import { requestService } from '@/services/service-request'
 
 import { Feedback, Loading, Page, Refresh, Stat } from './shared'
@@ -62,66 +42,6 @@ interface LinuxStatus {
   tun: boolean
   updatesConfigured: boolean
   build: string
-}
-interface CfResult {
-  ip: string
-  latency: number
-  speed: number
-  region: string
-}
-function CampusSettings() {
-  const campus = useBusiness<{
-    operators: string[]
-    operator?: string
-    enabled: boolean
-  }>('campus', {}, true)
-  const action = useAction()
-  const { session } = useFengwo()
-  const selected =
-    campus.data?.operator &&
-    campus.data.operators.includes(campus.data.operator)
-      ? campus.data.operator
-      : (campus.data?.operators[0] ?? '')
-  const save = (enabled: boolean, operator = selected) =>
-    void action.run(async () => {
-      await business('setCampus', { enabled, operator })
-      await campus.mutate()
-    })
-  return (
-    <section className="fengwo-form">
-      <Typography variant="h6">校园网络</Typography>
-      <Feedback error={campus.error || action.error} />
-      <FormControlLabel
-        label="校园模式"
-        control={
-          <Switch
-            checked={campus.data?.enabled ?? false}
-            disabled={
-              action.busy ||
-              !session?.profileUid ||
-              (!selected && !campus.data?.enabled)
-            }
-            onChange={(_, enabled) => save(enabled)}
-          />
-        }
-      />
-      {!!campus.data?.operators.length && (
-        <TextField
-          select
-          label="校园线路"
-          value={selected}
-          disabled={action.busy || !campus.data.enabled}
-          onChange={(event) => save(true, event.target.value)}
-        >
-          {campus.data.operators.map((operator, index) => (
-            <MenuItem key={operator} value={operator}>
-              线路 {index + 1}
-            </MenuItem>
-          ))}
-        </TextField>
-      )}
-    </section>
-  )
 }
 export function AdvancedPage() {
   const [tab, setTab] = useState(() =>
@@ -151,7 +71,6 @@ export function AdvancedPage() {
         <>
           <SettingSystem onError={error} />
           <SettingClash onError={error} />
-          <CampusSettings />
         </>
       ) : tab === 1 ? (
         <>
@@ -195,31 +114,12 @@ export function AdvancedPage() {
 export function ToolsPage() {
   const [tool, setTool] = useState('')
   const [ip, setIp] = useState<Record<string, unknown>>()
-  const [results, setResults] = useState<CfResult[]>([])
   const action = useAction()
   const { session } = useFengwo()
-  const links =
-    tool === 'speed'
-      ? [
-          ['Speedtest', 'https://www.speedtest.net/zh-Hans'],
-          ['Google Fiber', 'https://fiber.google.com/speedtest/'],
-          ['Fast.com', 'https://fast.com'],
-        ]
-      : [
-          ['Telegram', 'https://telegram.org/apps'],
-          ['X', 'https://x.com/'],
-          ['YouTube', 'https://www.youtube.com/'],
-          ['Netflix', 'https://www.netflix.com/'],
-          ['ChatGPT', 'https://chatgpt.com/'],
-          ['Cloudflare', 'https://speed.cloudflare.com/'],
-        ]
   const tools = [
-    { key: 'speed', title: '网络测速', icon: SpeedRounded },
-    { key: 'cf', title: 'Cloudflare 优选 IP', icon: CloudOutlined },
     { key: 'ip', title: 'IP 地址查询', icon: LocationOnOutlined },
     { key: 'stream', title: '流媒体解锁测试', icon: MovieOutlined },
     { key: 'chain', title: '链式代理', icon: LinkRounded },
-    { key: 'apps', title: '常用应用', icon: LanguageRounded },
   ]
   return (
     <Page title="实用工具">
@@ -255,100 +155,27 @@ export function ToolsPage() {
         <DialogContent>
           <div className="fengwo-form">
             <Feedback {...action} />
-            {tool === 'speed' || tool === 'apps' ? (
-              links.map(([label, url]) => (
-                <Button
-                  key={url}
-                  startIcon={<OpenInNewRounded />}
-                  onClick={() => void action.run(() => openUrl(url))}
-                >
-                  {label}
-                </Button>
-              ))
-            ) : tool === 'ip' ? (
+            <Button
+              disabled={action.busy || session?.offline}
+              onClick={() =>
+                void action.run(async () =>
+                  setIp(await business<Record<string, unknown>>('ipLookup')),
+                )
+              }
+            >
+              查询出口 IP
+            </Button>
+            {ip && (
               <>
-                <Button
-                  disabled={action.busy || session?.offline}
-                  onClick={() =>
-                    void action.run(async () =>
-                      setIp(
-                        await business<Record<string, unknown>>('ipLookup'),
-                      ),
-                    )
-                  }
-                >
-                  查询出口 IP
-                </Button>
-                {ip && (
-                  <>
-                    <Typography variant="h6">{String(ip.ip ?? '')}</Typography>
-                    <Typography>
-                      {[ip.country, ip.region, ip.city]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Typography>
-                    <Typography>
-                      {String(
-                        (ip.connection as Record<string, unknown>)?.isp ?? '',
-                      )}
-                    </Typography>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                <Alert severity="info">
-                  测速会产生网络流量，优选结果仅在应用后生效。
-                </Alert>
-                <Button
-                  startIcon={<SpeedRounded />}
-                  disabled={action.busy || session?.offline}
-                  onClick={() =>
-                    void action.run(async () =>
-                      setResults(await business<CfResult[]>('cfOptimize')),
-                    )
-                  }
-                >
-                  开始优选
-                </Button>
-                {action.busy && <Loading loading>{null}</Loading>}
-                <div className="fengwo-table">
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        {['IP', '延迟', '下载速度', '地区'].map((label) => (
-                          <TableCell key={label}>{label}</TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {results.map((result) => (
-                        <TableRow key={result.ip}>
-                          <TableCell>{result.ip}</TableCell>
-                          <TableCell>{result.latency} ms</TableCell>
-                          <TableCell>{bytes(result.speed)}/s</TableCell>
-                          <TableCell>{result.region}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <Button
-                  disabled={
-                    action.busy ||
-                    !results.length ||
-                    session?.offline ||
-                    !session?.profileUid
-                  }
-                  onClick={() =>
-                    void action.run(
-                      () => business('cfApply', { results }),
-                      '优选 IP 已应用',
-                    )
-                  }
-                >
-                  应用优选 IP
-                </Button>
+                <Typography variant="h6">{String(ip.ip ?? '')}</Typography>
+                <Typography>
+                  {[ip.country, ip.region, ip.city].filter(Boolean).join(' · ')}
+                </Typography>
+                <Typography>
+                  {String(
+                    (ip.connection as Record<string, unknown>)?.isp ?? '',
+                  )}
+                </Typography>
               </>
             )}
           </div>

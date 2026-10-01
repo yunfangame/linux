@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { releaseInfo, validatePackage } from './release.mjs'
+import { packageEpoch, releaseInfo, validatePackage } from './release.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const [input, output] = process.argv.slice(2)
@@ -54,6 +54,7 @@ try {
               name: query('NAME'),
               version: query('VERSION'),
               release: query('RELEASE'),
+              epoch: query('EPOCH'),
             }
       validatePackage(metadata, arch, format, release)
       packages.push({ filename, ...metadata, sha256: hash(bytes) })
@@ -73,6 +74,7 @@ try {
     .replace('@PAYLOAD_SHA256@', hash(archive))
     .replace('@VERSION@', release.version)
     .replace('@BUILD@', String(release.buildNumber))
+    .replace('@EPOCH@', String(packageEpoch))
   await mkdir(path.dirname(path.resolve(output)), { recursive: true })
   await writeFile(output, Buffer.concat([Buffer.from(header), archive]))
   await chmod(output, 0o755)

@@ -144,11 +144,11 @@
         },
         "options": {
           "logLevel": {
-            "debug": "Debug",
-            "info": "Info",
-            "warning": "Warn",
-            "error": "Error",
-            "silent": "Silent"
+            "debug": "调试",
+            "info": "信息",
+            "warning": "警告",
+            "error": "错误",
+            "silent": "静默"
           }
         }
       }

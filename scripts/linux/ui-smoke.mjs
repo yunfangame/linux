@@ -13,7 +13,7 @@ const browser = await chromium.launch({
 try {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
-    locale: 'zh-CN',
+    locale: 'en-US',
   })
   await context.route('**/*', (route) =>
     new URL(route.request().url()).origin === origin
@@ -109,7 +109,6 @@ try {
       profileUid: 'fixture-profile',
     }
     let verge = {
-      language: 'zh',
       theme_mode: 'light',
       auto_check_update: false,
       enable_system_proxy: false,
@@ -224,11 +223,11 @@ try {
           if (action === 'nodes')
             return names.map((name) => ({ name, is_online: true, rate: 1 }))
           if (action === 'rules') return ruleList
-          if (action === 'campus')
+          if (action === 'ipLookup')
             return {
-              operators: ['telecom'],
-              operator: 'telecom',
-              enabled: false,
+              ip: '192.0.2.10',
+              country: '测试地区',
+              connection: { isp: '测试网络' },
             }
           if (action === 'saveRules') {
             ruleList = payload.rules
@@ -428,6 +427,44 @@ try {
   for (const [route, title] of pages) {
     await page.locator(`nav a[href="${route}"]`).click()
     await page.getByRole('heading', { name: title, exact: true }).waitFor()
+    if (route === '/' || route === '/advanced') {
+      await page.getByText('系统代理', { exact: true }).waitFor()
+      await page.getByText('虚拟网卡模式', { exact: true }).waitFor()
+      assert.equal(await page.getByText(/^(System Proxy|Tun Mode)$/).count(), 0)
+    }
+    if (route === '/advanced') {
+      await page.getByText('系统设置', { exact: true }).waitFor()
+      await page.getByText('端口设置', { exact: true }).waitFor()
+      assert.equal(await page.getByText(/校园/).count(), 0)
+      const level = page.getByRole('combobox').filter({ hasText: '信息' })
+      await level.click()
+      assert.deepEqual(await page.getByRole('option').allTextContents(), [
+        '调试',
+        '信息',
+        '警告',
+        '错误',
+        '静默',
+      ])
+      await page.keyboard.press('Escape')
+    }
+    if (route === '/tools') {
+      assert.deepEqual(
+        await page.locator('.fengwo-plan h6').allTextContents(),
+        ['IP 地址查询', '流媒体解锁测试', '链式代理'],
+      )
+      assert.equal(
+        await page.locator('.fengwo-plan a[href="/unlock"]').count(),
+        1,
+      )
+      assert.equal(
+        await page.locator('.fengwo-plan a[href="/proxies"]').count(),
+        1,
+      )
+      await page.getByRole('button', { name: '打开', exact: true }).click()
+      await page.getByRole('button', { name: '查询出口 IP' }).click()
+      await page.getByText('192.0.2.10', { exact: true }).waitFor()
+      await page.getByRole('button', { name: '关闭', exact: true }).click()
+    }
     await page.mouse.move(1270, 890)
     await page.waitForTimeout(250)
     await page.screenshot({
@@ -437,6 +474,14 @@ try {
       ),
     })
   }
+  assert.equal(
+    await page.evaluate(() =>
+      window.__fengwoCalls.some(({ args }) =>
+        ['campus', 'setCampus'].includes(args.action),
+      ),
+    ),
+    false,
+  )
   await page.locator('nav a[href="/nodes"]').click()
   await page.getByRole('button', { name: '全部测速' }).click()
   await page.getByText('42 ms', { exact: true }).first().waitFor()

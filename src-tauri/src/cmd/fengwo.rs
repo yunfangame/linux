@@ -51,10 +51,6 @@ struct Account {
     rules: Vec<LocalRule>,
     #[serde(default)]
     preferred_ips: BTreeMap<String, String>,
-    #[serde(default)]
-    campus_operator: Option<String>,
-    #[serde(default)]
-    campus_hosts: BTreeMap<String, String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct LocalRule {
@@ -71,7 +67,7 @@ fn client() -> Result<reqwest::Client> {
         .timeout(Duration::from_secs(20))
         .connect_timeout(Duration::from_secs(6))
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent("FengwoLinux/2.5.6")
+        .user_agent(concat!("FengwoLinux/", env!("CARGO_PKG_VERSION")))
         .build()?)
 }
 fn safe_origin(value: &str) -> Result<reqwest::Url> {
@@ -103,7 +99,7 @@ pub(super) async fn read_json(request: reqwest::RequestBuilder) -> Result<Value>
     }
     serde_json::from_slice(&data).map_err(|_| anyhow!("invalid_response"))
 }
-fn transport_error(error: &reqwest::Error, reading_body: bool) -> anyhow::Error {
+pub(super) fn transport_error(error: &reqwest::Error, reading_body: bool) -> anyhow::Error {
     // Do not surface URLs, credentials or response contents from reqwest errors.
     anyhow!(if error.is_timeout() {
         "network_timeout"
@@ -123,6 +119,16 @@ fn retryable_transport(error: &anyhow::Error) -> bool {
             | "request_rejected_503"
             | "request_rejected_504"
     )
+}
+pub(super) async fn read_update_json(request: reqwest::RequestBuilder) -> Result<Value> {
+    let retry = request.try_clone().ok_or_else(|| anyhow!("update_check_failed"))?;
+    match read_json(request).await {
+        Err(error) if retryable_transport(&error) => {
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            read_json(retry).await
+        }
+        result => result,
+    }
 }
 async fn load() -> Result<Store> {
     let home = dirs::app_home_dir()?;
@@ -198,20 +204,34 @@ fn secure_config(store: &Store) -> Result<&Value> {
     );
     Ok(config)
 }
-async fn bootstrap(store: &mut Store) -> Result<()> {
-    let key = option_env!("REMOTE_CONFIG_AES_KEY").unwrap_or("");
-    let public = option_env!("REMOTE_CONFIG_SIGNING_PUBLIC_KEY").unwrap_or("");
-    ensure!(!key.is_empty() && !public.is_empty(), "build_configuration_missing");
-    for url in CONFIG_URLS {
-        if let Ok(envelope) = read_json(client()?.get(url)).await {
-            if let Ok(config) = crypto::decode_config(&envelope, key, public) {
-                store.config = config;
-                return Ok(());
-            }
-        }
+fn bootstrap_failure(store: &Store, require_fresh: bool, error: anyhow::Error) -> Result<()> {
+    if require_fresh {
+        return Err(error);
     }
     ensure!(!store.config.is_null(), "configuration_unavailable");
     Ok(())
+}
+async fn bootstrap(store: &mut Store, require_fresh: bool) -> Result<()> {
+    let key = option_env!("REMOTE_CONFIG_AES_KEY").unwrap_or("");
+    let public = option_env!("REMOTE_CONFIG_SIGNING_PUBLIC_KEY").unwrap_or("");
+    ensure!(!key.is_empty() && !public.is_empty(), "build_configuration_missing");
+    let mut last_error = anyhow!("configuration_unavailable");
+    for url in CONFIG_URLS {
+        let request = client()?.get(url).header("Cache-Control", "no-cache");
+        let envelope = if require_fresh {
+            read_update_json(request).await
+        } else {
+            read_json(request).await
+        };
+        match envelope.and_then(|value| crypto::decode_config(&value, key, public)) {
+            Ok(config) => {
+                store.config = config;
+                return Ok(());
+            }
+            Err(error) => last_error = error,
+        }
+    }
+    bootstrap_failure(store, require_fresh, last_error)
 }
 pub(super) async fn update_config(refresh: bool) -> Result<Value> {
     let mut lock = STATE.lock().await;
@@ -221,7 +241,7 @@ pub(super) async fn update_config(refresh: bool) -> Result<Value> {
     let store = lock.as_mut().ok_or_else(|| anyhow!("session_unavailable"))?;
     ensure!(!refresh || !store.offline, "offline_mode");
     if refresh {
-        bootstrap(store).await?;
+        bootstrap(store, true).await?;
         persist(store).await?;
     }
     Ok(store.config.clone())
@@ -282,7 +302,7 @@ async fn signed(store: &Store, op: &str, mut payload: Value) -> Result<Value> {
 }
 async fn login(store: &mut Store, payload: &Value) -> Result<()> {
     ensure!(store.session.as_ref().is_none_or(|s| s.needs_login), "logout_required");
-    bootstrap(store).await?;
+    bootstrap(store, false).await?;
     if store.seed.is_empty() {
         store.seed = crypto::encode(&crypto::random::<32>()?);
     }
@@ -389,20 +409,13 @@ fn runtime_profile(account: &Account) -> Result<String> {
     }
     rules.extend(existing);
     profile["rules"] = serde_yaml_ng::Value::Sequence(rules);
-    if !account.preferred_ips.is_empty() || !account.campus_hosts.is_empty() {
+    if !account.preferred_ips.is_empty() {
         if !profile["hosts"].is_mapping() {
             profile["hosts"] = serde_yaml_ng::Value::Mapping(Default::default());
         }
-        for (domain, ip) in account.preferred_ips.iter().chain(account.campus_hosts.iter()) {
+        for (domain, ip) in &account.preferred_ips {
             profile["hosts"][domain.as_str()] = serde_yaml_ng::Value::String(ip.clone());
         }
-    }
-    if !account.campus_hosts.is_empty() {
-        if !profile["dns"].is_mapping() {
-            profile["dns"] = serde_yaml_ng::Value::Mapping(Default::default());
-        }
-        profile["dns"]["enable"] = serde_yaml_ng::Value::Bool(true);
-        profile["dns"]["use-hosts"] = serde_yaml_ng::Value::Bool(true);
     }
     if let Some(groups) = profile["proxy-groups"].as_sequence_mut() {
         for group in groups {
@@ -746,7 +759,7 @@ pub async fn fengwo_action(action: String, payload: Option<Value>, session_id: O
                         "subscription_required"
                     );
                 } else {
-                    bootstrap(&mut next).await?;
+                    bootstrap(&mut next, false).await?;
                 }
             }
             "logout" => {
@@ -758,24 +771,6 @@ pub async fn fengwo_action(action: String, payload: Option<Value>, session_id: O
             }
             "rules" => {
                 return Ok(json!(next.accounts.get(&session(&next)?.account).map(|a| &a.rules)));
-            }
-            "campus" => {
-                let account = next.accounts.get(&session(&next)?.account).ok_or_else(|| anyhow!("account_missing"))?;
-                let lines = super::fengwo_tools::campus_lines(&next.config);
-                return Ok(json!({"operators":lines.keys().collect::<Vec<_>>(),"operator":account.campus_operator,"enabled":!account.campus_hosts.is_empty()}));
-            }
-            "setCampus" => {
-                let enabled = payload["enabled"].as_bool().ok_or_else(|| anyhow!("invalid_campus_state"))?;
-                let lines = super::fengwo_tools::campus_lines(&next.config);
-                let account_key = session(&next)?.account.clone();
-                let account = next.accounts.get_mut(&account_key).ok_or_else(|| anyhow!("account_missing"))?;
-                ensure!(!account.base_profile.is_empty(), "subscription_required");
-                if enabled {
-                    let operator = crypto::field(&payload,"operator")?;
-                    account.campus_hosts = lines.get(operator).ok_or_else(|| anyhow!("campus_line_unavailable"))?.clone();
-                    account.campus_operator = Some(operator.to_owned());
-                } else { account.campus_hosts.clear(); }
-                apply_account(account).await?;
             }
             "saveRules" => {
                 let account_key = session(&next)?.account.clone();
@@ -966,6 +961,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fengwo_update_reads_retry_transient_failures_once() {
+        use std::io::{Read as _, Write as _};
+        for (responses, expected) in [
+            (vec![(503, "{}"), (200, "{}")], None),
+            (vec![(503, "{}"), (503, "{}")], Some("request_rejected_503")),
+            (vec![(404, "{}")], Some("request_rejected_404")),
+            (vec![(200, "{")], Some("invalid_response")),
+        ] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = std::thread::spawn(move || {
+                for (status, body) in responses {
+                    let (mut stream, _) = listener.accept().unwrap();
+                    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                    let mut request = [0; 4096];
+                    stream.read(&mut request).unwrap();
+                    write!(
+                        stream,
+                        "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .unwrap();
+                }
+            });
+            let result = read_update_json(client().unwrap().get(format!("http://{address}/"))).await;
+            server.join().unwrap();
+            match expected {
+                Some(code) => assert_eq!(result.unwrap_err().to_string(), code),
+                None => assert_eq!(result.unwrap(), json!({})),
+            }
+        }
+    }
+
+    #[test]
+    fn fengwo_update_refresh_never_accepts_a_stale_cached_configuration() {
+        let store = Store {
+            config: json!({"UpdateUrl":"https://old.example/update.json"}),
+            ..Default::default()
+        };
+        assert!(bootstrap_failure(&store, false, anyhow!("network_timeout")).is_ok());
+        assert_eq!(
+            bootstrap_failure(&store, true, anyhow!("network_timeout"))
+                .unwrap_err()
+                .to_string(),
+            "network_timeout"
+        );
+        assert_eq!(store.config["UpdateUrl"], "https://old.example/update.json");
+    }
+
+    #[tokio::test]
     async fn fengwo_json_classifies_incomplete_and_timed_out_bodies() {
         use std::io::{Read as _, Write as _};
         for (body, declared_length, stall, expected) in [
@@ -1089,6 +1134,30 @@ mod tests {
         assert!(!runtime_profile(&account).unwrap().contains("example.org"));
         account.rules[0].value = "example.org,DIRECT\nMATCH,REJECT".into();
         assert!(runtime_profile(&account).is_err());
+    }
+    #[test]
+    fn fengwo_legacy_campus_settings_are_ignored_without_losing_other_account_data() {
+        let account: Account = serde_json::from_value(json!({
+            "profile_uid": "existing-profile",
+            "base_profile": "hosts: {example.org: 192.0.2.1}\ndns: {enable: false, use-hosts: false}\nrules: ['MATCH,DIRECT']\n",
+            "rules": [{"id":"1","kind":"DOMAIN","value":"local.example","target":"DIRECT","enabled":true}],
+            "preferred_ips": {"cdn.example": "192.0.2.2"},
+            "campus_operator": "telecom",
+            "campus_hosts": {"example.org": "192.0.2.3", "campus.example": "192.0.2.4"}
+        }))
+        .unwrap();
+        let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(&runtime_profile(&account).unwrap()).unwrap();
+        assert_eq!(account.profile_uid.as_deref(), Some("existing-profile"));
+        assert_eq!(value["hosts"]["example.org"].as_str(), Some("192.0.2.1"));
+        assert_eq!(value["hosts"]["cdn.example"].as_str(), Some("192.0.2.2"));
+        assert!(value["hosts"]["campus.example"].is_null());
+        assert_eq!(value["dns"]["enable"].as_bool(), Some(false));
+        assert_eq!(value["dns"]["use-hosts"].as_bool(), Some(false));
+        assert_eq!(value["rules"][0].as_str(), Some("DOMAIN,local.example,DIRECT"));
+        assert_eq!(value["rules"][1].as_str(), Some("MATCH,DIRECT"));
+        let persisted = serde_json::to_value(&account).unwrap();
+        assert!(persisted.get("campus_hosts").is_none());
+        assert!(persisted.get("campus_operator").is_none());
     }
     #[test]
     fn rules_prepend_without_changing_subscription_addresses() {

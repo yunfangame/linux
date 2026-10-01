@@ -8,7 +8,7 @@ import { DialogRef, TooltipIcon } from '@/components/base'
 import { useVerge } from '@/hooks/use-verge'
 import { navigationItems } from '@/pages/_navigation-meta'
 import { copyClashEnv } from '@/services/cmds'
-import { supportedLanguages } from '@/services/i18n'
+import { FALLBACK_LANGUAGE, supportedLanguages } from '@/services/i18n'
 import { showNotice } from '@/services/notice-service'
 import getSystem from '@/utils/get-system'
 
@@ -90,7 +90,7 @@ const SettingVergeBasic = ({ onError }: Props) => {
 
       <SettingItem label={t('settings.components.verge.basic.fields.language')}>
         <GuardState
-          value={language ?? 'en'}
+          value={language ?? FALLBACK_LANGUAGE}
           onCatch={onError}
           onFormat={(e: any) => e.target.value}
           onChange={(e) => onChangeData({ language: e })}

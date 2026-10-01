@@ -7,8 +7,11 @@ use tokio::sync::Mutex;
 static UPDATE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 fn client() -> Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(6))
+        .timeout(Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
+        .user_agent(concat!("FengwoLinux/", env!("CARGO_PKG_VERSION")))
         .build()?)
 }
 fn https(value: &str) -> Result<reqwest::Url> {
@@ -75,7 +78,8 @@ async fn manifest() -> Result<Option<Value>> {
         return Ok(None);
     };
     let url = https(url)?;
-    let envelope = super::fengwo::read_json(client()?.get(url.clone())).await?;
+    let envelope =
+        super::fengwo::read_update_json(client()?.get(url.clone()).header("Cache-Control", "no-cache")).await?;
     let value = crypto::decode_config(
         &envelope,
         option_env!("REMOTE_CONFIG_AES_KEY").unwrap_or(""),
@@ -85,9 +89,46 @@ async fn manifest() -> Result<Option<Value>> {
 }
 #[tauri::command]
 pub async fn fengwo_check_update() -> CmdResult<Option<Value>> {
-    manifest()
-        .await
-        .map_err(|_| super::coded_error("FENGWO_UPDATE_FAILED", "update_check_failed"))
+    manifest().await.map_err(update_error)
+}
+
+fn update_error(error: anyhow::Error) -> super::CommandFailure {
+    let detail = error.to_string();
+    let code = match detail.as_str() {
+        "network_timeout"
+        | "network_unavailable"
+        | "response_incomplete"
+        | "build_configuration_missing"
+        | "configuration_unavailable"
+        | "offline_mode"
+        | "rate_limited"
+        | "update_busy"
+        | "update_hash_mismatch"
+        | "update_changed"
+        | "update_install_failed"
+        | "no_update_available" => detail.as_str(),
+        "request_rejected_404" => "update_not_found",
+        "authentication_expired" | "request_rejected_401" | "request_rejected_403" => "update_access_denied",
+        "request_rejected_301"
+        | "request_rejected_302"
+        | "request_rejected_303"
+        | "request_rejected_307"
+        | "request_rejected_308" => "update_redirect_rejected",
+        "invalid_server_signature" | "config_key_mismatch" => "update_signature_invalid",
+        "decryption_failed" => "update_decryption_failed",
+        "invalid_config_envelope" | "config_authentication_failed" | "invalid_response" => "update_config_invalid",
+        "invalid_update_manifest"
+        | "invalid_update_format"
+        | "invalid_update_build"
+        | "invalid_update_hash"
+        | "invalid_update_version"
+        | "invalid_version"
+        | "invalid_sha256"
+        | "invalid_downloadUrl"
+        | "invalid_update_url" => "update_manifest_invalid",
+        _ => "update_check_failed",
+    };
+    super::coded_error("FENGWO_UPDATE_FAILED", code)
 }
 
 #[tauri::command]
@@ -104,13 +145,20 @@ pub async fn fengwo_install_update(expected_build: u64, expected_sha256: String)
         let result: Result<()> = async {
             use tokio::io::AsyncWriteExt as _;
             let mut response = reqwest::Client::builder()
+                .no_proxy()
+                .connect_timeout(Duration::from_secs(6))
                 .timeout(Duration::from_secs(600))
                 .redirect(reqwest::redirect::Policy::none())
                 .build()?
                 .get(https(crypto::field(&manifest, "url")?)?)
                 .send()
-                .await?
-                .error_for_status()?;
+                .await
+                .map_err(|error| super::fengwo::transport_error(&error, false))?;
+            ensure!(
+                response.status().is_success(),
+                "request_rejected_{}",
+                response.status().as_u16()
+            );
             let mut options = tokio::fs::OpenOptions::new();
             options.write(true).create_new(true);
             #[cfg(unix)]
@@ -118,7 +166,11 @@ pub async fn fengwo_install_update(expected_build: u64, expected_sha256: String)
             let mut file = options.open(&path).await?;
             let mut digest = ring::digest::Context::new(&ring::digest::SHA256);
             let mut size = 0usize;
-            while let Some(chunk) = response.chunk().await? {
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|error| super::fengwo::transport_error(&error, true))?
+            {
                 size += chunk.len();
                 ensure!(size <= 1024 * 1024 * 1024, "update_too_large");
                 digest.update(&chunk);
@@ -141,7 +193,7 @@ pub async fn fengwo_install_update(expected_build: u64, expected_sha256: String)
         result
     }
     .await
-    .stringify_err()
+    .map_err(update_error)
 }
 
 fn confirm_release(manifest: &Value, expected_build: u64, expected_sha256: &str) -> Result<()> {
@@ -155,6 +207,22 @@ fn confirm_release(manifest: &Value, expected_build: u64, expected_sha256: &str)
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn update_errors_are_actionable_without_exposing_remote_data() {
+        for (input, expected) in [
+            ("network_timeout", "network_timeout"),
+            ("request_rejected_404", "update_not_found"),
+            ("request_rejected_302", "update_redirect_rejected"),
+            ("authentication_expired", "update_access_denied"),
+            ("invalid_server_signature", "update_signature_invalid"),
+            ("decryption_failed", "update_decryption_failed"),
+            ("invalid_config_envelope", "update_config_invalid"),
+            ("invalid_update_hash", "update_manifest_invalid"),
+            ("https://private.example/?token=secret", "update_check_failed"),
+        ] {
+            assert_eq!(update_error(anyhow!(input)).detail, expected);
+        }
+    }
     fn manifest_fixture() -> Value {
         json!({"Authentication":"FengWo","format":"fengwo-update","schemaVersion":1,"packages":{"linux-universal":{"enabled":true,"installerFormat":"fengwo-universal-run-v1","version":"2.5.6+2","buildNumber":2,"downloadUrl":"./Fengwo-Linux.run","sha256":"a".repeat(64)},"windows-x64":{"enabled":true}}})
     }

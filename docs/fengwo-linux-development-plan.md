@@ -93,6 +93,10 @@ The build number enters the Tauri package version and RPM release field, allowin
 
 ## Updates From Configuration
 
+Fengwo Linux uses its own product version starting at `1.0.0`; the upstream source baseline remains official `v2.5.6`. Build numbers continue increasing independently. Release packages use epoch `1` (DEB `1:1.0.0+7`, RPM epoch `1`, version `1.0.0+7`, release `7`) so package managers accept the transition from the earlier `2.5.6+6` test packages. Run `scripts/linux/collect.mjs` after native builds to apply the Debian epoch using `python3-debian`; the universal bundler rejects packages with a missing epoch. Displayed versions and update manifest versions never contain a package-manager epoch.
+
+Update checks require fresh verified main configuration instead of silently falling back to the cached main configuration. Read-only configuration requests retry transient transport/502/503/504 errors once; signature, permission and format errors are not retried. The UI distinguishes update configuration/signature errors and missing or redirected downloads. Downloads still require explicit installation confirmation and SHA-256 validation.
+
 1. Verify/decrypt the existing remote configuration and read its `UpdateUrl` HTTPS URL.
 2. Fetch and verify/decrypt its `fengwo-config` envelope using the same trusted bootstrap keys.
 3. Require inner `Authentication: FengWo`, `format: fengwo-update`, `schemaVersion: 1`.

@@ -36,6 +36,7 @@ import {
 import { Fragment, type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'
 
+
 import loginBrand from '@/assets/image/fengwo-login-brand.png'
 import logo from '@/assets/image/fengwo-logo.png'
 import { useSystemProxyState } from '@/hooks/use-system-proxy-state'
@@ -47,6 +48,7 @@ import {
   useFengwo,
   useSessionInit,
 } from '@/services/fengwo'
+import { version } from '@root/package.json'
 
 import { Confirm, Feedback } from './shared'
 import { UpdateNotice } from './update'
@@ -81,7 +83,7 @@ export function FengwoSidebar() {
         <div>
           <Typography sx={{ fontWeight: 800 }}>蜂窝加速器</Typography>
           <Typography variant="caption" color="text.secondary">
-            Linux · 2.5.6
+            Linux · {version}
           </Typography>
         </div>
       </div>
@@ -198,7 +200,7 @@ function LoginForm() {
           </Typography>
         </div>
         <Typography className="fengwo-login-copyright">
-          蜂窝加速器 · 2.5.6
+          蜂窝加速器 · {version}
         </Typography>
       </section>
       <main className="fengwo-login-panel">

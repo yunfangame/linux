@@ -4,6 +4,7 @@ set -eu
 payload_sha256='@PAYLOAD_SHA256@'
 bundle_version='@VERSION@'
 bundle_build='@BUILD@'
+package_epoch='@EPOCH@'
 mode=install
 assume_yes=0
 extract_dir=
@@ -53,12 +54,13 @@ package="$work_dir/fengwo-$arch.$format"
 if [ "$format" = deb ]; then
   [ "$(dpkg-deb -f "$package" Architecture)" = "$deb_arch" ] || { printf 'DEB architecture mismatch.\n' >&2; exit 1; }
   [ "$(dpkg-deb -f "$package" Package)" = fengwo-linux ] || { printf 'DEB package name mismatch.\n' >&2; exit 1; }
-  [ "$(dpkg-deb -f "$package" Version)" = "$bundle_version" ] || { printf 'DEB version mismatch.\n' >&2; exit 1; }
+  [ "$(dpkg-deb -f "$package" Version)" = "$package_epoch:$bundle_version" ] || { printf 'DEB version mismatch.\n' >&2; exit 1; }
 else
   [ "$(rpm -qp --queryformat '%{ARCH}' "$package")" = "$rpm_arch" ] || { printf 'RPM architecture mismatch.\n' >&2; exit 1; }
   [ "$(rpm -qp --queryformat '%{NAME}' "$package")" = fengwo-linux ] || { printf 'RPM package name mismatch.\n' >&2; exit 1; }
   [ "$(rpm -qp --queryformat '%{VERSION}' "$package")" = "$bundle_version" ] || { printf 'RPM version mismatch.\n' >&2; exit 1; }
   [ "$(rpm -qp --queryformat '%{RELEASE}' "$package")" = "$bundle_build" ] || { printf 'RPM release mismatch.\n' >&2; exit 1; }
+  [ "$(rpm -qp --queryformat '%{EPOCH}' "$package")" = "$package_epoch" ] || { printf 'RPM epoch mismatch.\n' >&2; exit 1; }
 fi
 printf 'Fengwo Linux %s | CPU: %s | Package manager: %s\n' "$bundle_version" "$arch" "$manager"
 if [ "$mode" = check ]; then printf 'Package checks passed. Dependencies will be resolved by %s during installation.\n' "$manager"; exit 0; fi

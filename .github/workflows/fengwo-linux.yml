@@ -45,7 +45,7 @@ jobs:
       - name: Install build dependencies
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git curl ca-certificates build-essential pkg-config libssl-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm file xz-utils
+          apt-get install -y --no-install-recommends git curl ca-certificates build-essential pkg-config libssl-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm file xz-utils python3-debian
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -109,10 +109,12 @@ jobs:
           FENGWO_BUILD_NUMBER: ${{ inputs.build_number }}
           FENGWO_DOWNLOAD_URL: ${{ inputs.download_url }}
         run: |
-          node scripts/linux/bundle.mjs linux-packages artifacts/Fengwo-Linux-universal.run
-          sh artifacts/Fengwo-Linux-universal.run --check
+          VERSION="$(node -p "require('./package.json').version")"
+          INSTALLER="artifacts/Fengwo-Linux-$VERSION-universal.run"
+          node scripts/linux/bundle.mjs linux-packages "$INSTALLER"
+          sh "$INSTALLER" --check
           if [ -n "$FENGWO_DOWNLOAD_URL" ]; then
-            node scripts/linux/update-entry.mjs artifacts/Fengwo-Linux-universal.run artifacts/linux-update-entry.json
+            node scripts/linux/update-entry.mjs "$INSTALLER" artifacts/linux-update-entry.json artifacts/fengwo-update.plaintext.json
           fi
       - uses: actions/upload-artifact@v6
         with:
